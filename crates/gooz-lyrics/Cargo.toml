@@ -1,0 +1,11 @@
+[package]
+name = "gooz-lyrics"
+description = "Rhyme & flow engine: grapheme-to-phoneme, multi-syllabic rhyme search, semantic ranking, song-structure templates"
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
+license.workspace = true
+
+[dependencies]
+gooz-ratio.workspace = true
+gooz-model.workspace = true

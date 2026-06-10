@@ -1,0 +1,9 @@
+[package]
+name = "gooz-ratio"
+description = "Pure music-math core: frequency ratios, harmonic series, beat-ratio grids, Euclidean rhythms, quantization"
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
+license.workspace = true
+
+[dependencies]

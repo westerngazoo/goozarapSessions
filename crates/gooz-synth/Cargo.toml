@@ -1,0 +1,11 @@
+[package]
+name = "gooz-synth"
+description = "Instrument renderers: Karplus-Strong guitar/bass, FM/wavetable voices, drum synthesis, sampler, FX chain"
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
+license.workspace = true
+
+[dependencies]
+gooz-ratio.workspace = true
+gooz-dsp.workspace = true

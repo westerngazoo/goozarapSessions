@@ -1,0 +1,6 @@
+/target
+**/*.rs.bk
+.DS_Store
+# local model artifacts & audio scratch (sessions carry their own)
+/models-cache/
+*.wav.tmp

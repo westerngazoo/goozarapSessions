@@ -1,0 +1,27 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/gooz-ratio",
+    "crates/gooz-dsp",
+    "crates/gooz-audio",
+    "crates/gooz-synth",
+    "crates/gooz-session",
+    "crates/gooz-model",
+    "crates/gooz-lyrics",
+    "apps/gooz-studio",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+repository = "https://github.com/westerngazoo/goozarapSessions"
+license = "MIT"
+
+[workspace.dependencies]
+gooz-ratio = { path = "crates/gooz-ratio" }
+gooz-dsp = { path = "crates/gooz-dsp" }
+gooz-audio = { path = "crates/gooz-audio" }
+gooz-synth = { path = "crates/gooz-synth" }
+gooz-session = { path = "crates/gooz-session" }
+gooz-model = { path = "crates/gooz-model" }
+gooz-lyrics = { path = "crates/gooz-lyrics" }

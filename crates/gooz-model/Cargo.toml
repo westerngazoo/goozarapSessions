@@ -1,0 +1,11 @@
+[package]
+name = "gooz-model"
+description = "Local ML: per-song/per-album influence models — feature extraction, on-device training of small adapters, inference (candle)"
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
+license.workspace = true
+
+[dependencies]
+gooz-ratio.workspace = true
+gooz-dsp.workspace = true

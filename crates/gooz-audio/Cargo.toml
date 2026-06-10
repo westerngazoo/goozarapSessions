@@ -1,0 +1,11 @@
+[package]
+name = "gooz-audio"
+description = "Real-time audio engine: device I/O, lock-free graph, ratio-locked transport/clock, recording, playback"
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
+license.workspace = true
+
+[dependencies]
+gooz-ratio.workspace = true
+gooz-dsp.workspace = true

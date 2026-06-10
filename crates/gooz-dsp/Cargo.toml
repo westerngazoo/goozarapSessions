@@ -1,0 +1,10 @@
+[package]
+name = "gooz-dsp"
+description = "Custom DSP library: FFT/STFT, pitch tracking (YIN), onset detection, filters, waveshaping/distortion, time-stretch"
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
+license.workspace = true
+
+[dependencies]
+gooz-ratio.workspace = true

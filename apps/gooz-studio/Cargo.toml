@@ -1,0 +1,16 @@
+[package]
+name = "gooz-studio"
+description = "The goozarapSessions desktop studio — Tauri shell, Easy Mode UI"
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
+license.workspace = true
+
+[dependencies]
+gooz-ratio.workspace = true
+gooz-dsp.workspace = true
+gooz-audio.workspace = true
+gooz-synth.workspace = true
+gooz-session.workspace = true
+gooz-model.workspace = true
+gooz-lyrics.workspace = true
