@@ -7,9 +7,14 @@
 //! at a frequency and [snaps][PitchGrid::snap] an arbitrary pitch (e.g. a
 //! tracked vocal) onto the nearest degree in the correct octave.
 //!
+//! Rhythm is the same idea in time: a [`Pattern`] is a Euclidean rhythm
+//! `E(k, n)` (the "sparse↔busy" control), a [`BarGrid`] subdivides a bar and
+//! [quantizes][BarGrid::quantize] onto it, [`Polyrhythm`] composes two pulse
+//! streams, and [`Tempo`] maps bar phases to wall-clock time.
+//!
 //! Bounded responsibility: math only. No I/O, no audio, no allocation on the
 //! snapping hot path, and no dependencies on any other workspace crate.
-//! Realizes R-0001 / SPEC-0001; rhythm and beat ratios are R-0002.
+//! Realizes R-0001 / SPEC-0001 (pitch) and R-0002 / SPEC-0002 (rhythm).
 //!
 //! ```
 //! use gooz_ratio::{PitchGrid, Ratio};
@@ -28,10 +33,17 @@
 //! # Ok::<(), gooz_ratio::RatioError>(())
 //! ```
 
+mod beat;
+mod beat_error;
 mod error;
 mod grid;
+mod math;
 mod ratio;
+mod rhythm;
 
+pub use beat::{BarGrid, Polyrhythm, QuantizedBeat, Tempo};
+pub use beat_error::BeatError;
 pub use error::RatioError;
 pub use grid::{PitchGrid, SnappedPitch};
 pub use ratio::Ratio;
+pub use rhythm::Pattern;
