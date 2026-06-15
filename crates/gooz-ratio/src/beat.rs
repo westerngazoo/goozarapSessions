@@ -160,10 +160,12 @@ impl Polyrhythm {
     /// assert_eq!(Polyrhythm::new(4, 3).unwrap().grid_steps(), 12);
     /// ```
     pub fn grid_steps(&self) -> u64 {
-        // Both are u32, so the lcm always fits in u64 — the None branch is
-        // unreachable here.
-        math::lcm(u64::from(self.a), u64::from(self.b))
-            .expect("lcm of two u32 values always fits in u64")
+        // lcm = (a / gcd) * b. a and b are u32, so widened to u64 the product is
+        // at most (2^32 - 1)^2 < u64::MAX — it cannot overflow, so no fallible
+        // arithmetic (and no panic path) is needed.
+        let a = u64::from(self.a);
+        let b = u64::from(self.b);
+        a / math::gcd(a, b) * b
     }
 
     /// The `a`-stream pulses as reduced bar fractions `i/a` for `i` in `0..a`.

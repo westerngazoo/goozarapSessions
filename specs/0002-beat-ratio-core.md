@@ -22,7 +22,7 @@ std-only:
 ```
 crates/gooz-ratio/src/
 ├── lib.rs       (+ re-exports: BarGrid, QuantizedBeat, Pattern, Polyrhythm, Tempo, BeatError)
-├── math.rs      pub(crate) gcd(u64,u64)->u64 / lcm(u64,u64)->Option<u64> — shared (DRY)
+├── math.rs      pub(crate) gcd(u64,u64)->u64 — shared by ratio.rs and beat.rs (DRY)
 ├── beat_error.rs BeatError — the rhythm modules' typed error
 ├── rhythm.rs    Pattern — Euclidean E(k,n) via Bjorklund, rotation, onsets
 └── beat.rs      BarGrid + QuantizedBeat, Polyrhythm, Tempo
@@ -33,9 +33,11 @@ changes) so the crate has a single gcd. No other R-0001 code changes. The moved
 `gcd` keeps identical semantics, including `gcd(0, n) = n` — `BarGrid::position`
 relies on it to reduce the downbeat `0/steps` to `(0, 1)`. The R-0001
 acceptance suite (`tests/acceptance_r0001.rs`) is the regression gate for this
-move and must stay green. `lcm(a, b)` is computed as
-`(a / gcd(a, b)).checked_mul(b)` and returns `Option<u64>` (`None` on overflow,
-consistent with `RatioError::Overflow` discipline); it is never allowed to wrap.
+move and must stay green. There is no shared `lcm` helper: the only lcm need is
+`Polyrhythm::grid_steps`, which composes two `u32`s — `(a / gcd(a, b)) * b`
+widened to `u64` is at most `(2³²−1)² < u64::MAX`, so it is computed inline with
+a plain (non-fallible, non-panicking) multiply rather than via a general
+`Option`-returning helper.
 
 ### `BeatError` — the rhythm modules' typed error
 
@@ -109,11 +111,11 @@ pub struct QuantizedBeat {
 
 - `Polyrhythm { a: u32, b: u32 }`, invariant `a, b >= 1`.
 - `new(a, b) -> Result<Polyrhythm, BeatError>` (`0` → `EmptyGrid`).
-- `grid_steps() -> u64` — `lcm(a as u64, b as u64)`, the shared grid both pulse
-  streams align on (AC6). The `u32 × u32` domain is provably overflow-free in
-  `u64` (worst case `(2³²−1)·(2³²−2) < u64::MAX`), so `math::lcm`'s `Option`
-  is always `Some` here — but `grid_steps` still propagates rather than
-  unwrapping, keeping the no-panic guarantee.
+- `grid_steps() -> u64` — `lcm(a, b)` as `(a / gcd(a, b)) * b` with `a, b`
+  widened from `u32` to `u64`, the shared grid both pulse streams align on
+  (AC6). The `u32 × u32` domain is provably overflow-free in `u64` (worst case
+  `(2³²−1)² < u64::MAX`), so this uses a plain multiply — no `Option`, no
+  `unwrap`/`expect`, no panic path.
 - `a_pulses() -> Vec<(u64, u64)>` / `b_pulses() -> Vec<(u64, u64)>` — the evenly
   spaced pulse positions as reduced bar fractions `i/a` (`i` in `0..a`) and
   `i/b`. For `3:2`: `a_pulses = [(0,1),(1,3),(2,3)]`, `b_pulses = [(0,1),(1,2)]`.
@@ -200,7 +202,8 @@ Maps to R-0002 AC1–AC8; qa owns `tests/acceptance_r0002.rs`.
 | 2026-06-15 | Dedicated `BeatError`, not shared `RatioError` | Interface segregation; pitch and rhythm error sets barely overlap. |
 | 2026-06-15 | Shared `pub(crate) math::{gcd,lcm}`; `ratio.rs` refactored to use it | One gcd in the crate (DRY); the only R-0001 change is call-sites. |
 | 2026-06-15 | Tie-break to the earlier step via `(scaled-0.5).ceil()` | Deterministic and testable; `f64::round` ties away-from-zero, the wrong direction. |
-| 2026-06-15 | Architect review (REQUEST CHANGES) applied: short-circuit `onsets==0` before Bjorklund (the loop hangs on an empty onset pile — a worse failure than a panic); `lcm -> Option<u64>` never wraps; quantize cast contract documented; `BeatError` derives/`Display` named; `gcd(0,n)=n` preserved through the `math.rs` move with the R-0001 suite as regression gate | Findings 1–5 of the SPEC-0002 review. Finding 1 was blocking (non-terminating `E(0,n)`). |
+| 2026-06-15 | Architect review (REQUEST CHANGES) applied: short-circuit `onsets==0` before Bjorklund (the loop hangs on an empty onset pile — a worse failure than a panic); quantize cast contract documented; `BeatError` derives/`Display` named; `gcd(0,n)=n` preserved through the `math.rs` move with the R-0001 suite as regression gate | Findings 1–5 of the SPEC-0002 review. Finding 1 was blocking (non-terminating `E(0,n)`). |
+| 2026-06-15 | QA sign-off note resolved: `grid_steps` computes lcm inline with a plain multiply (provably overflow-free over the `u32` domain) instead of a general `Option`-returning `lcm` + `expect` | Removes the only `expect` on a library path — the no-panic guarantee is structural, not justified-unreachable; also drops a now-unused helper. |
 
 ## Changelog
 

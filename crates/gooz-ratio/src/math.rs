@@ -1,8 +1,11 @@
 //! Shared integer math used by both the pitch and beat cores.
 //!
-//! Crate-internal: keeps a single `gcd` (and the `lcm` built on it) so the
-//! exact-rational reductions in `ratio.rs` and the grid composition in
-//! `beat.rs` never duplicate the algorithm.
+//! Crate-internal: keeps a single `gcd` so the exact-rational reductions in
+//! `ratio.rs` and the grid composition in `beat.rs` never duplicate the
+//! algorithm. (`lcm` is not a shared helper: its only use,
+//! `Polyrhythm::grid_steps`, composes two `u32`s where `(a / gcd) * b` is
+//! provably overflow-free in `u64`, so it is computed inline without any
+//! fallible arithmetic.)
 
 /// Greatest common divisor (Euclid). `gcd(0, n) == n` and `gcd(n, 0) == n`.
 pub(crate) fn gcd(mut a: u64, mut b: u64) -> u64 {
@@ -12,15 +15,4 @@ pub(crate) fn gcd(mut a: u64, mut b: u64) -> u64 {
         b = r;
     }
     a
-}
-
-/// Least common multiple, or `None` on `u64` overflow.
-///
-/// Divides before multiplying so the intermediate stays as small as possible;
-/// `lcm(a, 0) == Some(0)`.
-pub(crate) fn lcm(a: u64, b: u64) -> Option<u64> {
-    if a == 0 || b == 0 {
-        return Some(0);
-    }
-    (a / gcd(a, b)).checked_mul(b)
 }
