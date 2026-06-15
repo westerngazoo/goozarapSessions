@@ -1,6 +1,6 @@
 # SPEC-0002 — Beat-ratio core
 
-- **Status:** Accepted
+- **Status:** Implemented — QA PASS, architect APPROVE (awaiting owner PR review)
 - **Realizes:** R-0002
 - **Author:** Claude (owner: Gustavo Delgadillo)
 - **Created:** 2026-06-15
@@ -179,20 +179,20 @@ None — settled in the decision log.
 
 Maps to R-0002 AC1–AC8; qa owns `tests/acceptance_r0002.rs`.
 
-- [ ] AC1 — `E(k,n)` exact onset count + known patterns (3,8)/(5,8)/(4,16),
+- [x] AC1 — `E(k,n)` exact onset count + known patterns (3,8)/(5,8)/(4,16),
       first step onset, deterministic.
-- [ ] AC2 — boundaries: `k=0` all rests, `k=n` all onsets, `k>n` + `n=0` typed
+- [x] AC2 — boundaries: `k=0` all rests, `k=n` all onsets, `k>n` + `n=0` typed
       errors.
-- [ ] AC3 — rotation preserves count/length; multiples of `n` are identity;
+- [x] AC3 — rotation preserves count/length; multiples of `n` are identity;
       negative offsets valid.
-- [ ] AC4 — bar grid: `n` positions, exact `i/n`, downbeat 0, ascending; `n=0`
+- [x] AC4 — bar grid: `n` positions, exact `i/n`, downbeat 0, ascending; `n=0`
       error.
-- [ ] AC5 — quantize nearest step, wrap-around, idempotence, signed offset,
+- [x] AC5 — quantize nearest step, wrap-around, idempotence, signed offset,
       earlier-step tie-break, non-finite rejected.
-- [ ] AC6 — polyrhythm on `lcm(a,b)`; `3:2` pulse fractions exact; `0` error.
-- [ ] AC7 — tempo: `60/BPM` per beat (120→0.5 exact), `step_time`, invalid
+- [x] AC6 — polyrhythm on `lcm(a,b)`; `3:2` pulse fractions exact; `0` error.
+- [x] AC7 — tempo: `60/BPM` per beat (120→0.5 exact), `step_time`, invalid
       tempo rejected.
-- [ ] AC8 — doc tests on every public item; build/test/clippy/fmt green.
+- [x] AC8 — doc tests on every public item; build/test/clippy/fmt green.
 
 ## 7. Decision log
 

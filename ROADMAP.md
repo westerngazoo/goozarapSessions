@@ -31,7 +31,7 @@ ratio-locked beat and record/play the user's voice.
 | Req | Capability | Spec | Status |
 |-----|------------|------|--------|
 | R-0001 | Frequency-ratio core: interval arithmetic, harmonic-series grids, ratio-complexity ("smooth↔tense") ordering | SPEC-0001 | In review |
-| R-0002 | Beat-ratio core: bar grids, Euclidean rhythms `E(k,n)`, polyrhythm composition, time quantization | SPEC-0002 | Backlog |
+| R-0002 | Beat-ratio core: bar grids, Euclidean rhythms `E(k,n)`, polyrhythm composition, time quantization | SPEC-0002 | In review |
 | R-0003 | Audio engine v0: device I/O, lock-free graph, record a take / play it back | SPEC-0003 | Backlog |
 | R-0004 | Ratio-locked transport: metronome and click track driven by the beat grid | SPEC-0004 | Backlog |
 
@@ -99,6 +99,10 @@ Freestyle support: beat, ears, and a rhyme brain.
 
 ## Current focus
 
-`R-0001` (frequency-ratio core) is implemented, QA-signed-off (PASS), and
-architect-approved on branch `R-0001-frequency-ratio-core` — awaiting owner PR
-review and merge. Next: `R-0002` (beat-ratio core) once R-0001 merges.
+`R-0001` (frequency-ratio core) and `R-0002` (beat-ratio core) are both
+implemented, QA-signed-off (PASS), and architect-approved. PRs open: R-0001 →
+`main` ([#1]); R-0002 is stacked on R-0001 and merges after it. Both halves of
+the ratio core (pitch + rhythm) now live in `gooz-ratio`. Next: `R-0003`
+(audio engine v0 — record/playback) begins M1's move from pure math to sound.
+
+[#1]: https://github.com/westerngazoo/goozarapSessions/pull/1
