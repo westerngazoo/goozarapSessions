@@ -103,7 +103,7 @@ impl PitchGrid {
     /// # use gooz_ratio::PitchGrid;
     /// assert_eq!(PitchGrid::harmonic(220.0, 9).unwrap().root_hz(), 220.0);
     /// ```
-    pub fn root_hz(self: &PitchGrid) -> f64 {
+    pub fn root_hz(&self) -> f64 {
         self.root_hz
     }
 
@@ -167,8 +167,9 @@ impl PitchGrid {
         }
 
         let octave = octave_floor as i32 + best_octave_adjust;
-        let base = self.root_hz * (best_degree.num() as f64 / best_degree.den() as f64);
-        let snapped_hz = base * 2f64.powi(octave);
+        // Reuse the one pinned ratio→Hz formula so on-grid pitches stay bitwise
+        // fixed points; the root is already validated, so this cannot fail.
+        let snapped_hz = best_degree.to_hz(self.root_hz)? * 2f64.powi(octave);
         let cents_offset = 1200.0 * (hz / snapped_hz).log2();
 
         Ok(SnappedPitch {

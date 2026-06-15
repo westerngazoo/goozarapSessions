@@ -21,7 +21,7 @@ Adopt the methodology and prepare the repository.
 | `project-specifics.md` filled in | Done |
 | Toolchain chosen and recorded (Rust workspace, gates green) | Done |
 | Architecture written (`docs/ARCHITECTURE.md`) and workspace scaffolded | Done |
-| First requirement discussed (R-0001) | Backlog |
+| First requirement discussed (R-0001) | Done |
 
 ### M1 — Ratio core & audio engine
 
@@ -30,7 +30,7 @@ ratio-locked beat and record/play the user's voice.
 
 | Req | Capability | Spec | Status |
 |-----|------------|------|--------|
-| R-0001 | Frequency-ratio core: interval arithmetic, harmonic-series grids, ratio-complexity ("smooth↔tense") ordering | SPEC-0001 | Backlog |
+| R-0001 | Frequency-ratio core: interval arithmetic, harmonic-series grids, ratio-complexity ("smooth↔tense") ordering | SPEC-0001 | In review |
 | R-0002 | Beat-ratio core: bar grids, Euclidean rhythms `E(k,n)`, polyrhythm composition, time quantization | SPEC-0002 | Backlog |
 | R-0003 | Audio engine v0: device I/O, lock-free graph, record a take / play it back | SPEC-0003 | Backlog |
 | R-0004 | Ratio-locked transport: metronome and click track driven by the beat grid | SPEC-0004 | Backlog |
@@ -99,6 +99,6 @@ Freestyle support: beat, ears, and a rhyme brain.
 
 ## Current focus
 
-Finish M0: discuss `R-0001` (frequency-ratio core) together — it is the
-foundation everything else quantizes against — then write it from
-`requirements/TEMPLATE.md` and start the loop.
+`R-0001` (frequency-ratio core) is implemented, QA-signed-off (PASS), and
+architect-approved on branch `R-0001-frequency-ratio-core` — awaiting owner PR
+review and merge. Next: `R-0002` (beat-ratio core) once R-0001 merges.

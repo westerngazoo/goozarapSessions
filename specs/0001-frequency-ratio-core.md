@@ -1,6 +1,6 @@
 # SPEC-0001 — Frequency-ratio core
 
-- **Status:** Accepted
+- **Status:** Implemented — QA PASS, architect APPROVE (awaiting owner PR review)
 - **Realizes:** R-0001
 - **Author:** Claude (owner: Gustavo Delgadillo)
 - **Created:** 2026-06-10
@@ -185,19 +185,20 @@ None — settled in the decision log.
 Each maps to R-0001's ACs; the qa agent owns the acceptance tests in
 `crates/gooz-ratio/tests/acceptance_r0001.rs`, units live beside the modules.
 
-Unticked until QA sign-off (loop step 7):
+Ticked at QA sign-off (loop step 7) — PASS, 43 acceptance/unit + 19 doc
+tests, clippy `-D warnings` clean, fmt clean:
 
-- [ ] AC1 — canonical form, equality across unreduced spellings, zero rejected.
-- [ ] AC2 — exact stack/unstack/invert, overflow as typed error.
-- [ ] AC3 — octave reduction into [1,2), octave-shift invariance, idempotence,
+- [x] AC1 — canonical form, equality across unreduced spellings, zero rejected.
+- [x] AC2 — exact stack/unstack/invert, overflow as typed error.
+- [x] AC3 — octave reduction into [1,2), octave-shift invariance, idempotence,
       `Overflow` on unrepresentable reduced forms.
-- [ ] AC4 — Tenney complexity reproduces the canonical consonance order.
-- [ ] AC5 — harmonic grids: exact degree sets for odd limits (e.g. L=9, L=15).
-- [ ] AC6 — to_hz exactness; snapping correctness across octaves, fixed
+- [x] AC4 — Tenney complexity reproduces the canonical consonance order.
+- [x] AC5 — harmonic grids: exact degree sets for odd limits (e.g. L=9, L=15).
+- [x] AC6 — to_hz exactness; snapping correctness across octaves, fixed
       points, idempotence, tie-break, cents offset, invalid input errors
       (including non-finite quotient).
-- [ ] AC7 — cents values (1200 exact, 701.955 ± 0.001).
-- [ ] AC8 — doc tests on every public item; build/test/clippy/fmt green.
+- [x] AC7 — cents values (1200 exact, 701.955 ± 0.001).
+- [x] AC8 — doc tests on every public item; build/test/clippy/fmt green.
 
 ## 7. Decision log
 
