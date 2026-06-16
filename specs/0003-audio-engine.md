@@ -1,6 +1,6 @@
 # SPEC-0003 — Audio engine v0 (record & playback)
 
-- **Status:** Accepted
+- **Status:** Implemented — QA PASS, architect APPROVE (awaiting owner PR review)
 - **Realizes:** R-0003
 - **Author:** Claude (owner: Gustavo Delgadillo)
 - **Created:** 2026-06-15
@@ -261,20 +261,20 @@ None — settled in the decision log.
 Maps to R-0003 AC1–AC8; qa owns `tests/acceptance_r0003.rs` (uses `VirtualBackend`
 only — no device in CI).
 
-- [ ] AC1 — round-trip record→take→playback reproduces a known signal via the
+- [x] AC1 — round-trip record→take→playback reproduces a known signal via the
       virtual backend; a second sub-case proves all-zero output when nothing is
       loaded.
-- [ ] AC2 — engine is generic over `AudioBackend`; virtual + cpal both implement
+- [x] AC2 — engine is generic over `AudioBackend`; virtual + cpal both implement
       it; identical engine/ring logic.
-- [ ] AC3 — capture/render only push/pop preallocated rings; overrun drops,
+- [x] AC3 — capture/render only push/pop preallocated rings; overrun drops,
       underrun zero-fills; both exercised by a test.
-- [ ] AC4 — `Take` frames/duration correct; lossless record→read-back.
-- [ ] AC5 — start/stop record & playback; stop_recording yields the take; state
+- [x] AC4 — `Take` frames/duration correct; lossless record→read-back.
+- [x] AC5 — start/stop record & playback; stop_recording yields the take; state
       transitions well-defined.
-- [ ] AC6 — typed `AudioError`; no panic on library paths.
-- [ ] AC7 — runnable demo records & plays back on a real machine (verified by
+- [x] AC6 — typed `AudioError`; no panic on library paths.
+- [x] AC7 — runnable demo records & plays back on a real machine (verified by
       ear; not a CI gate).
-- [ ] AC8 — public items documented (device examples `no_run`); four gates green.
+- [x] AC8 — public items documented (device examples `no_run`); four gates green.
 
 ## 7. Decision log
 

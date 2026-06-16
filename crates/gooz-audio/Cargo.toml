@@ -1,6 +1,6 @@
 [package]
 name = "gooz-audio"
-description = "Real-time audio engine: device I/O, lock-free graph, ratio-locked transport/clock, recording, playback"
+description = "Real-time audio engine v0: device I/O behind a backend seam, lock-free record/playback rings, takes"
 version.workspace = true
 edition.workspace = true
 repository.workspace = true
