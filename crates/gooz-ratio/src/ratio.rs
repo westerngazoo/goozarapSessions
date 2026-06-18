@@ -4,16 +4,7 @@ use std::cmp::Ordering;
 use std::fmt;
 
 use crate::error::RatioError;
-
-/// Greatest common divisor (binary-free Euclid), used to keep ratios reduced.
-fn gcd(mut a: u64, mut b: u64) -> u64 {
-    while b != 0 {
-        let r = a % b;
-        a = b;
-        b = r;
-    }
-    a
-}
+use crate::math::gcd;
 
 /// An exact, positive frequency ratio held in lowest terms.
 ///
