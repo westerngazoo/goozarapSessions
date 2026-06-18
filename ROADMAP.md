@@ -23,17 +23,17 @@ Adopt the methodology and prepare the repository.
 | Architecture written (`docs/ARCHITECTURE.md`) and workspace scaffolded | Done |
 | First requirement discussed (R-0001) | Done |
 
-### M1 — Ratio core & audio engine
+### M1 — Ratio core & audio engine  ·  *complete*
 
 The math foundation and a working engine: by the end of M1 the app can keep a
 ratio-locked beat and record/play the user's voice.
 
 | Req | Capability | Spec | Status |
 |-----|------------|------|--------|
-| R-0001 | Frequency-ratio core: interval arithmetic, harmonic-series grids, ratio-complexity ("smooth↔tense") ordering | SPEC-0001 | In review |
-| R-0002 | Beat-ratio core: bar grids, Euclidean rhythms `E(k,n)`, polyrhythm composition, time quantization | SPEC-0002 | In review |
-| R-0003 | Audio engine v0: device I/O, lock-free graph, record a take / play it back | SPEC-0003 | In review |
-| R-0004 | Ratio-locked transport: metronome and click track driven by the beat grid | SPEC-0004 | In review |
+| R-0001 | Frequency-ratio core: interval arithmetic, harmonic-series grids, ratio-complexity ("smooth↔tense") ordering | SPEC-0001 | Done |
+| R-0002 | Beat-ratio core: bar grids, Euclidean rhythms `E(k,n)`, polyrhythm composition, time quantization | SPEC-0002 | Done |
+| R-0003 | Audio engine v0: device I/O, lock-free graph, record a take / play it back | SPEC-0003 | Done |
+| R-0004 | Ratio-locked transport: metronome and click track driven by the beat grid | SPEC-0004 | Done |
 
 ### M2 — Easy Mode voice-to-riff
 
@@ -41,7 +41,7 @@ The signature loop: hum → distorted guitar riff, end to end.
 
 | Req | Capability | Spec | Status |
 |-----|------------|------|--------|
-| R-0005 | Pitch tracking (YIN) + onset detection over a recorded take | SPEC-0005 | In review |
+| R-0005 | Pitch tracking (YIN) + onset detection over a recorded take | SPEC-0005 | Done |
 | R-0006 | Snap-to-grid: quantize tracked pitches/onsets onto frequency & beat ratio grids | SPEC-0006 | Backlog |
 | R-0007 | Instrument render v0: Karplus-Strong guitar + distortion FX chain | SPEC-0007 | Backlog |
 | R-0008 | Hum-to-riff pipeline: record → track → quantize → render → loopable stem | SPEC-0008 | Backlog |
@@ -99,20 +99,16 @@ Freestyle support: beat, ears, and a rhyme brain.
 
 ## Current focus
 
-**M1 is functionally complete.** All four requirements — `R-0001` (frequency
-ratios), `R-0002` (beat ratios), `R-0003` (audio engine v0), `R-0004`
-(ratio-locked metronome) — are implemented, QA-signed-off (PASS), and
-architect-approved. PRs open and stacked in order: R-0001 → `main` ([#1]);
-R-0002 → R-0001 ([#2]); R-0003 → R-0002 ([#3]); R-0004 → R-0003 ([#4]). The
-ratio core (pitch + rhythm) lives in `gooz-ratio`; `gooz-audio` can record a
-take, play it back, and run a sample-accurate metronome driven by the beat
-grid — the math now drives the sound.
+**M1 is complete and merged to `main`**, and **M2 is underway** — `R-0001`
+(frequency ratios), `R-0002` (beat ratios), `R-0003` (audio engine v0), `R-0004`
+(ratio-locked metronome), and `R-0005` (pitch tracking + onset detection) are
+all implemented, QA-signed-off (PASS), architect-approved, and merged. The
+ratio core (pitch + rhythm) lives in `gooz-ratio`; `gooz-audio` records a take,
+plays it back, and runs a sample-accurate metronome driven by the beat grid;
+`gooz-dsp` transcribes a recorded take into note events. The math drives the
+sound, and the app can hear what you hummed.
 
-Next milestone, **M2 — Easy Mode voice-to-riff**, starts at `R-0005` (pitch
-tracking + onset detection over a recorded take) in the new `gooz-dsp` crate —
-the first step of turning a hum into a riff.
-
-[#1]: https://github.com/westerngazoo/goozarapSessions/pull/1
-[#2]: https://github.com/westerngazoo/goozarapSessions/pull/2
-[#3]: https://github.com/westerngazoo/goozarapSessions/pull/3
-[#4]: https://github.com/westerngazoo/goozarapSessions/pull/4
+Next is **R-0006 — snap-to-grid**: quantize `gooz-dsp`'s note events onto
+`gooz-ratio`'s frequency and beat grids (the "make it sound right" step that
+re-introduces `gooz-ratio` to `gooz-dsp`), continuing M2 toward the hum→riff
+pipeline (R-0008).
