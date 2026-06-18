@@ -33,7 +33,7 @@ ratio-locked beat and record/play the user's voice.
 | R-0001 | Frequency-ratio core: interval arithmetic, harmonic-series grids, ratio-complexity ("smooth↔tense") ordering | SPEC-0001 | In review |
 | R-0002 | Beat-ratio core: bar grids, Euclidean rhythms `E(k,n)`, polyrhythm composition, time quantization | SPEC-0002 | In review |
 | R-0003 | Audio engine v0: device I/O, lock-free graph, record a take / play it back | SPEC-0003 | In review |
-| R-0004 | Ratio-locked transport: metronome and click track driven by the beat grid | SPEC-0004 | Backlog |
+| R-0004 | Ratio-locked transport: metronome and click track driven by the beat grid | SPEC-0004 | In review |
 
 ### M2 — Easy Mode voice-to-riff
 
@@ -99,14 +99,20 @@ Freestyle support: beat, ears, and a rhyme brain.
 
 ## Current focus
 
-`R-0001` (frequency-ratio core), `R-0002` (beat-ratio core), and `R-0003`
-(audio engine v0) are all implemented, QA-signed-off (PASS), and
+**M1 is functionally complete.** All four requirements — `R-0001` (frequency
+ratios), `R-0002` (beat ratios), `R-0003` (audio engine v0), `R-0004`
+(ratio-locked metronome) — are implemented, QA-signed-off (PASS), and
 architect-approved. PRs open and stacked in order: R-0001 → `main` ([#1]);
-R-0002 → R-0001 ([#2]); R-0003 → R-0002 ([#3]). The ratio core (pitch + rhythm)
-lives in `gooz-ratio`; `gooz-audio` can now record a take and play it back
-(real device + CI-tested in-memory backend). M1's last requirement is `R-0004`
-(ratio-locked transport: metronome/click from the beat grid), which marries
-`gooz-ratio`'s beat clock to `gooz-audio`'s engine.
+R-0002 → R-0001 ([#2]); R-0003 → R-0002 ([#3]); R-0004 → R-0003 ([#4]). The
+ratio core (pitch + rhythm) lives in `gooz-ratio`; `gooz-audio` can record a
+take, play it back, and run a sample-accurate metronome driven by the beat
+grid — the math now drives the sound.
+
+Next milestone, **M2 — Easy Mode voice-to-riff**, starts at `R-0005` (pitch
+tracking + onset detection over a recorded take) in the new `gooz-dsp` crate —
+the first step of turning a hum into a riff.
 
 [#1]: https://github.com/westerngazoo/goozarapSessions/pull/1
 [#2]: https://github.com/westerngazoo/goozarapSessions/pull/2
+[#3]: https://github.com/westerngazoo/goozarapSessions/pull/3
+[#4]: https://github.com/westerngazoo/goozarapSessions/pull/4

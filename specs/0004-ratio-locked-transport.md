@@ -1,6 +1,6 @@
 # SPEC-0004 — Ratio-locked transport (metronome)
 
-- **Status:** Accepted
+- **Status:** Implemented — QA PASS, architect APPROVE (awaiting owner PR review)
 - **Realizes:** R-0004
 - **Author:** Claude (owner: Gustavo Delgadillo)
 - **Created:** 2026-06-18
@@ -188,17 +188,17 @@ None — settled in the decision log.
 
 Maps to R-0004 AC1–AC7; qa owns `tests/acceptance_r0004.rs` (VirtualBackend only).
 
-- [ ] AC1 — `boundary_frame` exact, absolute, strictly increasing for sane tempi
+- [x] AC1 — `boundary_frame` exact, absolute, strictly increasing for sane tempi
       (48k/120/2 → 0, 12000, 24000, …).
-- [ ] AC2 — `click_kind` accent/beat/subdivision classification over a bar.
-- [ ] AC3 — `Tempo::bpm()`/`beats_per_bar()` exist; transport built from a `Tempo`.
-- [ ] AC4 — three click voices with descending peak amplitude (0.9 / 0.6 / 0.3).
-- [ ] AC5 — render places correct clicks, accents downbeats, writes every
+- [x] AC2 — `click_kind` accent/beat/subdivision classification over a bar.
+- [x] AC3 — `Tempo::bpm()`/`beats_per_bar()` exist; transport built from a `Tempo`.
+- [x] AC4 — three click voices with descending peak amplitude (0.9 / 0.6 / 0.3).
+- [x] AC5 — render places correct clicks, accents downbeats, writes every
       channel of each frame; one-block == many-small-blocks; while-advance firing
       never stalls; ticks non-empty so no panic; no allocation on the path.
-- [ ] AC6 — `start_metronome` continuous output; mutually exclusive with
+- [x] AC6 — `start_metronome` continuous output; mutually exclusive with
       playback; ticks at expected positions via `VirtualBackend`.
-- [ ] AC7 — demo runs (by ear); typed errors, no panic; docs; four gates green.
+- [x] AC7 — demo runs (by ear); typed errors, no panic; docs; four gates green.
 
 ## 7. Decision log
 
