@@ -220,6 +220,26 @@ impl Tempo {
         Ok(Tempo { bpm, beats_per_bar })
     }
 
+    /// Beats per minute.
+    ///
+    /// ```
+    /// # use gooz_ratio::Tempo;
+    /// assert_eq!(Tempo::new(120.0, 4.0).unwrap().bpm(), 120.0);
+    /// ```
+    pub fn bpm(&self) -> f64 {
+        self.bpm
+    }
+
+    /// Beats per bar.
+    ///
+    /// ```
+    /// # use gooz_ratio::Tempo;
+    /// assert_eq!(Tempo::new(120.0, 4.0).unwrap().beats_per_bar(), 4.0);
+    /// ```
+    pub fn beats_per_bar(&self) -> f64 {
+        self.beats_per_bar
+    }
+
     /// Seconds per beat: `60 / bpm`.
     ///
     /// ```

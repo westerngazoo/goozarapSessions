@@ -33,12 +33,16 @@ mod backend;
 mod cpal_backend;
 mod engine;
 mod error;
+mod metronome;
 mod ring;
 mod take;
+mod transport;
 
 pub use backend::{AudioBackend, AudioStream, VirtualBackend};
 pub use cpal_backend::CpalBackend;
 pub use engine::Engine;
 pub use error::AudioError;
+pub use metronome::Metronome;
 pub use ring::{PlaybackFeed, Player, RecordSink, Recorder, playback_channel, record_channel};
 pub use take::Take;
+pub use transport::{ClickKind, Transport};

@@ -2,6 +2,7 @@
 
 use crate::backend::{AudioBackend, AudioStream};
 use crate::error::AudioError;
+use crate::metronome::Metronome;
 use crate::ring::{playback_channel, record_channel};
 use crate::take::Take;
 
@@ -34,6 +35,7 @@ pub struct Engine<B: AudioBackend> {
     backend: B,
     recording: Option<(crate::ring::RecordSink, AudioStream)>,
     playback: Option<AudioStream>,
+    metronome: Option<AudioStream>,
 }
 
 impl<B: AudioBackend> Engine<B> {
@@ -43,6 +45,7 @@ impl<B: AudioBackend> Engine<B> {
             backend,
             recording: None,
             playback: None,
+            metronome: None,
         }
     }
 
@@ -59,6 +62,11 @@ impl<B: AudioBackend> Engine<B> {
     /// Whether a playback is in progress.
     pub fn is_playing(&self) -> bool {
         self.playback.is_some()
+    }
+
+    /// Whether the metronome is running.
+    pub fn is_metronome_running(&self) -> bool {
+        self.metronome.is_some()
     }
 
     /// Starts capturing input into a ring sized for `capacity_frames` frames.
@@ -95,8 +103,9 @@ impl<B: AudioBackend> Engine<B> {
     /// playing replaces the current playback: the old output stream is dropped
     /// (stopping it) and a new one opened. Propagates the backend's `AudioError`.
     pub fn start_playback(&mut self, take: &Take) -> Result<(), AudioError> {
-        // Drop any current playback first so the replacement's stream owns the
-        // backend's output slot.
+        // Take playback and the metronome share the single device output; drop
+        // both current sources first so the replacement owns the output slot.
+        self.metronome = None;
         self.playback = None;
         let (mut feed, mut player) = playback_channel(take.samples().len());
         feed.load(take.samples());
@@ -109,9 +118,26 @@ impl<B: AudioBackend> Engine<B> {
         Ok(())
     }
 
-    /// Stops any recording and playback, returning to idle.
+    /// Starts the ratio-locked metronome on a continuous output stream. The
+    /// metronome and take playback share the single device output, so starting
+    /// the metronome stops any take playback (and any running metronome).
+    /// Propagates the backend's `AudioError`.
+    pub fn start_metronome(&mut self, mut metronome: Metronome) -> Result<(), AudioError> {
+        self.playback = None;
+        self.metronome = None;
+        let stream = self
+            .backend
+            .open_output(Box::new(move |output: &mut [f32]| {
+                metronome.render(output);
+            }))?;
+        self.metronome = Some(stream);
+        Ok(())
+    }
+
+    /// Stops any recording, playback, and metronome, returning to idle.
     pub fn stop(&mut self) {
         self.recording = None;
         self.playback = None;
+        self.metronome = None;
     }
 }

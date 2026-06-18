@@ -7,5 +7,6 @@ repository.workspace = true
 license.workspace = true
 
 [dependencies]
+gooz-ratio.workspace = true
 cpal = "0.15"
 ringbuf = "0.4"

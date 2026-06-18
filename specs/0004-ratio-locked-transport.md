@@ -97,10 +97,12 @@ pub struct Metronome {
   - accent: 1000 Hz, peak 0.9;
   - beat: 800 Hz, peak 0.6;
   - subdivision: 800 Hz, peak 0.3;
-  built by a private `tick(sample_rate, freq, amp, secs)` = `amp · sin(2π f t) ·
-  (1 − i/n)` (linear decay) for `i in 0..n`, `n = round(sample_rate · secs).max(1)`
-  (the `.max(1)` keeps the tick non-empty, so the render's `buf[cursor]` is
-  always in bounds — no panic on a degenerate sample rate).
+  built by a private `tick(sample_rate, freq, amp, secs)` = `amp · cos(2π f t) ·
+  (1 − i/n)` (linear decay) for `i in 0..n`, `n = round(sample_rate · secs).max(1)`.
+  The `.max(1)` keeps the tick non-empty so the render's `buf[cursor]` is always
+  in bounds (no panic). Cosine (not sine) gives a sharp attack — sample 0 is the
+  peak `amp`, not a zero crossing — so even a degenerate config that retriggers
+  the click every frame still emits sound rather than silence.
 - `render(&mut self, output: &mut [f32])` (AC5), RT-safe — iterates `output` one
   **frame** at a time (`output.chunks_mut(channels)`), at absolute frame `pos`:
   - **fire every boundary at or before this frame** —
