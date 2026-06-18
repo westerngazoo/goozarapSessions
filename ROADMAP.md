@@ -41,7 +41,7 @@ The signature loop: hum → distorted guitar riff, end to end.
 
 | Req | Capability | Spec | Status |
 |-----|------------|------|--------|
-| R-0005 | Pitch tracking (YIN) + onset detection over a recorded take | SPEC-0005 | Backlog |
+| R-0005 | Pitch tracking (YIN) + onset detection over a recorded take | SPEC-0005 | In review |
 | R-0006 | Snap-to-grid: quantize tracked pitches/onsets onto frequency & beat ratio grids | SPEC-0006 | Backlog |
 | R-0007 | Instrument render v0: Karplus-Strong guitar + distortion FX chain | SPEC-0007 | Backlog |
 | R-0008 | Hum-to-riff pipeline: record → track → quantize → render → loopable stem | SPEC-0008 | Backlog |

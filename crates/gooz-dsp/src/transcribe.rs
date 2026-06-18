@@ -27,9 +27,10 @@ pub struct Config {
     pub yin_threshold: f32,
     /// Onset STFT size, in samples.
     pub fft_size: usize,
-    /// Onset peak-pick margin, in multiples of the local standard deviation.
+    /// Onset threshold margin, in multiples of the global standard deviation of
+    /// the spectral flux.
     pub onset_sensitivity: f32,
-    /// Half-width (in frames) of the onset adaptive-threshold window.
+    /// Half-width (in frames) of the onset peak-pick window.
     pub onset_window_frames: usize,
 }
 

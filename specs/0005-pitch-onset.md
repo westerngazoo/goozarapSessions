@@ -1,6 +1,6 @@
 # SPEC-0005 — Pitch tracking & onset detection (note transcription)
 
-- **Status:** Accepted
+- **Status:** Implemented — QA PASS, architect APPROVE (awaiting owner PR review)
 - **Realizes:** R-0005
 - **Author:** Claude (owner: Gustavo Delgadillo)
 - **Created:** 2026-06-18
@@ -181,14 +181,14 @@ None — settled in the decision log.
 Maps to R-0005 AC1–AC7; qa owns `tests/acceptance_r0005.rs`, golden synthetic
 signals only (no microphone).
 
-- [ ] AC1 — YIN within ±1 % on synth tones (220/330/440 Hz).
-- [ ] AC2 — silence/noise unvoiced; tone voiced; unvoiced never contributes pitch.
-- [ ] AC3 — K bursts → K onsets within ≈±20 ms; steady tone → 1 onset.
-- [ ] AC4 — two-tone signal → 2 ordered, non-overlapping notes, right pitch/onset.
-- [ ] AC5 — `[f_min,f_max]` range honoured; notes only from voiced segments.
-- [ ] AC6 — typed `DspError` for empty / zero-rate / non-finite / window-too-large;
+- [x] AC1 — YIN within ±1 % on synth tones (220/330/440 Hz).
+- [x] AC2 — silence/noise unvoiced; tone voiced; unvoiced never contributes pitch.
+- [x] AC3 — K bursts → K onsets within ≈±20 ms; steady tone → 1 onset.
+- [x] AC4 — two-tone signal → 2 ordered, non-overlapping notes, right pitch/onset.
+- [x] AC5 — `[f_min,f_max]` range honoured; notes only from voiced segments.
+- [x] AC6 — typed `DspError` for empty / zero-rate / non-finite / window-too-large;
       no panic; non-finite input rejected before any sum/sort.
-- [ ] AC7 — doc examples on public items; golden tests; four gates green.
+- [x] AC7 — doc examples on public items; golden tests; four gates green.
 
 ## 7. Decision log
 
