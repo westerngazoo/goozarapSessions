@@ -78,9 +78,13 @@ returns `(f0, confidence)`; per de Cheveigné & Kawahara:
    `d(τ) = Σ_{j=0}^{w-1} (x[j] − x[j+τ])²` for `τ` in `0..=w`.
 2. cumulative mean normalized difference: `d'(0) = 1`,
    `d'(τ) = d(τ) / ((1/τ) Σ_{k=1}^{τ} d(k))`.
-3. restrict `τ` to `[τ_min, τ_max] = [sr/f_max, sr/f_min]` (clamped to `w`);
-   pick the **first** local minimum with `d'(τ) < yin_threshold`, else the
-   global minimum over the range.
+3. search `τ` over a **generous fixed range** `[sr/2000, sr/50]` (clamped to
+   `[2, w]`) — wide enough to find the true fundamental even when it is *above*
+   `f_max`. Pick the **first** local minimum with `d'(τ) < yin_threshold`, else
+   the global minimum over the range. (Searching only `[sr/f_max, sr/f_min]`
+   would be wrong: a tone above `f_max` would alias to its in-range subharmonic
+   — e.g. 900 Hz → ~453 Hz — and be falsely reported. Finding the real
+   fundamental and rejecting it in step 5 is correct.)
 4. parabolic interpolation around the chosen `τ` for a sub-sample period,
    clamped so `τ_refined ≥ τ_min` (it can never be 0, so `f0` is finite).
 5. `f0 = sr / τ_refined`; `confidence = (1 − d'(τ)).clamp(0.0, 1.0)` (`d'` can
@@ -102,12 +106,21 @@ slides `window` by `hop`, stamping each frame at its centre time.
    |X_0[k]|` = frame 0's energy. This makes an attack that begins at sample 0
    (energy already present, no rising edge) register as an onset at `t ≈ 0` —
    satisfying "a steady tone produces exactly one onset (its start)".
-3. peak-pick: `m` is an onset if `SF[m]` is a local maximum (`m = 0` counts when
-   `SF[0] ≥ SF[1]`) and exceeds `mean + onset_sensitivity · stddev` taken over a
-   centred window of `±onset_window_frames` frames, truncated at the signal
-   edges (mean/stddev over the available frames). Onset time = `m · hop / sr`,
-   strength = `SF[m]`.
-4. enforce a minimum inter-onset gap (≈30 ms) so one attack is one onset.
+3. threshold: `SF[m]` must exceed `mean + onset_sensitivity · stddev` taken over
+   the **whole** flux array (a global adaptive threshold). A local window tracks
+   the sustain level too closely and fires on steady-state flux ripple; against
+   the global distribution an attack spike towers over the signal while sustain
+   ripple does not.
+4. release rejection: also require the frame's **energy to be rising** —
+   per-frame energy is `Σ_k |X_m[k]|²` (sum of squares, per Parseval; *not*
+   summed magnitudes, which a broadband edge transient can inflate), and the
+   onset frame must have `energy[m] > energy[m-1]`. This drops the broadband
+   transient at a note *release* (tone→silence), which produces positive flux
+   but falling energy.
+5. peak-pick: among frames passing 3–4, `m` is an onset if `SF[m]` is the
+   maximum over `±onset_window_frames` frames (truncated at the edges), with a
+   minimum inter-onset gap (≈30 ms) so one attack is one onset. Onset time =
+   `m · hop / sr`, strength = `SF[m]`.
 
 ### Assembly (transcribe.rs) — AC4, AC5
 
@@ -187,6 +200,9 @@ signals only (no microphone).
 | 2026-06-18 | Minimum inter-onset gap in the peak-picker | Prevents one attack registering as several onsets (AC3's "not a stream of spurious ones"). |
 | 2026-06-18 | Architect review (REQUEST CHANGES) applied: implicit zero frame before the first so a sample-0 attack onsets at t≈0; synthetic boundary at the first voiced frame so a leading note isn't dropped; emit a note only when ≥1 voiced frame AND duration > 0; reject non-finite input with `DspError::NonFiniteSample` before any sum/sort; clamp `τ_refined ≥ τ_min` and `confidence` to [0,1]; pin the adaptive-threshold window (`onset_window_frames`, edge-truncated) and raw magnitudes | Findings 1–6 of the SPEC-0005 review. Findings 1–2 were blocking (sample-0 attack / dropped leading segment broke AC3/AC4). |
 | 2026-06-18 | Golden test corpus may use a short silent lead-in before the first tone | Gives the first attack a genuine rising edge; the implicit-zero-frame rule also covers the sample-0 case, so the suite is robust either way. |
+| 2026-06-18 | YIN searches a generous fixed `τ` range `[sr/2000, sr/50]`, then gates the detected `f0` by `[f_min, f_max]` (rather than restricting the search to `[sr/f_max, sr/f_min]`) | Discovered at implementation: restricting the search aliases an above-`f_max` tone to its in-range subharmonic (900 Hz → ~453 Hz), which would wrongly produce a note and break AC5. Finding the true fundamental and rejecting out-of-range f0 is correct. |
+| 2026-06-18 | Onset threshold is **global** (mean+sensitivity·stddev over the whole flux), not a local centred window | Discovered at implementation: a local window tracks the sustain level and fires repeatedly on steady-state flux ripple (one tone → many onsets). The global distribution cleanly separates attack spikes from ripple. |
+| 2026-06-18 | Onset requires **rising energy** (`Σ|X|²`), rejecting note releases | Discovered at implementation: a tone→silence release makes a broadband edge transient with positive flux, producing a false onset. Energy (sum of squares) genuinely falls at a release, so the rising-energy gate removes it while keeping attacks. |
 
 ## Changelog
 
