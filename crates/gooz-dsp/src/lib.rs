@@ -30,10 +30,15 @@
 
 mod error;
 mod onset;
+mod quantize;
 mod transcribe;
 mod yin;
 
 pub use error::DspError;
 pub use onset::detect_onsets;
+pub use quantize::{QuantizedNote, quantize_notes};
 pub use transcribe::{Config, NoteEvent, Onset, PitchFrame, PitchTrack, Transcription, analyze};
 pub use yin::pitch_track;
+
+// Re-exported so callers can name the grid/result types from `gooz-dsp` alone.
+pub use gooz_ratio::{PitchGrid, Ratio, Tempo};
