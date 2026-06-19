@@ -1,6 +1,6 @@
 # SPEC-0006 — Snap-to-grid (quantize notes onto the ratio grids)
 
-- **Status:** Accepted
+- **Status:** Implemented — QA PASS, architect APPROVE
 - **Realizes:** R-0006
 - **Author:** Claude (owner: Gustavo Delgadillo)
 - **Created:** 2026-06-18
@@ -134,14 +134,14 @@ None — settled in the decision log.
 
 Maps to R-0006 AC1–AC7; qa owns `tests/acceptance_r0006.rs`.
 
-- [ ] AC1 — pitch → nearest grid degree, correct octave, exact grid frequency
+- [x] AC1 — pitch → nearest grid degree, correct octave, exact grid frequency
       (446 Hz on a 220-rooted grid → 440 Hz).
-- [ ] AC2 — signed cents offset (sharp +, flat −, on-pitch ≈ 0).
-- [ ] AC3 — onset → nearest step (`round(onset/step_secs)`); `t = 0` → step 0.
-- [ ] AC4 — duration → whole steps, always ≥ 1 step.
-- [ ] AC5 — order/count preserved; bad-pitch note skipped; empty → empty.
-- [ ] AC6 — deterministic, inward-only dep, no panic.
-- [ ] AC7 — doc examples on public items; tests; four gates green.
+- [x] AC2 — signed cents offset (sharp +, flat −, on-pitch ≈ 0).
+- [x] AC3 — onset → nearest step (`round(onset/step_secs)`); `t = 0` → step 0.
+- [x] AC4 — duration → whole steps, always ≥ 1 step.
+- [x] AC5 — order/count preserved; bad-pitch note skipped; empty → empty.
+- [x] AC6 — deterministic, inward-only dep, no panic.
+- [x] AC7 — doc examples on public items; tests; four gates green.
 
 ## 7. Decision log
 

@@ -67,7 +67,7 @@ pub fn quantize_notes(
             let end_raw = ((note.onset_secs + note.duration_secs) / step_secs)
                 .round()
                 .max(0.0) as u64;
-            let end_step = end_raw.max(onset_step + 1); // duration always >= 1 step
+            let end_step = end_raw.max(onset_step.saturating_add(1)); // duration always >= 1 step
             Some(QuantizedNote {
                 degree: snapped.degree,
                 octave: snapped.octave,
