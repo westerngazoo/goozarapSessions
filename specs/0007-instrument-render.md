@@ -1,6 +1,6 @@
 # SPEC-0007 — Instrument render v0 (Karplus-Strong guitar + distortion)
 
-- **Status:** Accepted
+- **Status:** Implemented — QA PASS, architect APPROVE
 - **Realizes:** R-0007
 - **Author:** Claude (owner: Gustavo Delgadillo)
 - **Created:** 2026-06-19
@@ -151,22 +151,22 @@ None — settled in the decision log.
 
 Maps to R-0007 AC1–AC7; qa owns `tests/acceptance_r0007.rs`.
 
-- [ ] AC1 — single note in the integer-tuned band (`n ≳ 48`, i.e. `f ≲ sr/48 ≈
+- [x] AC1 — single note in the integer-tuned band (`n ≳ 48`, i.e. `f ≲ sr/48 ≈
       1 kHz at 48 kHz; test at 440 Hz): autocorrelation period ≈ `sample_rate /
       f` within ~1 %. (Above that band the integer-delay error grows past 1 % —
       a documented v0 limitation, §4; do not test there.)
-- [ ] AC2 — energy in a late window < an early window (plucked decay).
-- [ ] AC3 — silence before the first onset; non-zero from the onset.
-- [ ] AC4 — two notes sum; first note rings past `onset+duration`; length spans
+- [x] AC2 — energy in a late window < an early window (plucked decay).
+- [x] AC3 — silence before the first onset; non-zero from the onset.
+- [x] AC4 — two notes sum; first note rings past `onset+duration`; length spans
       last onset + tail.
-- [ ] AC5 — SoftClip/HardClip each alter the signal; higher drive saturates more;
+- [x] AC5 — SoftClip/HardClip each alter the signal; higher drive saturates more;
       output bounded in `[-1, 1]`; **SoftClip at low drive ≈ identity** and
       **HardClip at drive = 1.0 ≈ identity** (HardClip at low drive is near-
       silent, by design — not "clean").
-- [ ] AC6 — deterministic (re-render equality on the same notes+config — not a
+- [x] AC6 — deterministic (re-render equality on the same notes+config — not a
       frozen byte buffer); empty/zero-rate/all-skipped → empty; bad-freq skipped;
       no NaN; no panic.
-- [ ] AC7 — doc examples on public items; tests; four gates green.
+- [x] AC7 — doc examples on public items; tests; four gates green.
 
 ## 7. Decision log
 
