@@ -7,10 +7,6 @@ repository.workspace = true
 license.workspace = true
 
 [dependencies]
-gooz-ratio.workspace = true
 gooz-dsp.workspace = true
 gooz-audio.workspace = true
 gooz-synth.workspace = true
-gooz-session.workspace = true
-gooz-model.workspace = true
-gooz-lyrics.workspace = true
