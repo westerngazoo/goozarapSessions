@@ -43,7 +43,7 @@ The signature loop: hum → distorted guitar riff, end to end.
 |-----|------------|------|--------|
 | R-0005 | Pitch tracking (YIN) + onset detection over a recorded take | SPEC-0005 | Done |
 | R-0006 | Snap-to-grid: quantize tracked pitches/onsets onto frequency & beat ratio grids | SPEC-0006 | Done |
-| R-0007 | Instrument render v0: Karplus-Strong guitar + distortion FX chain | SPEC-0007 | Backlog |
+| R-0007 | Instrument render v0: Karplus-Strong guitar + distortion FX chain | SPEC-0007 | Done |
 | R-0008 | Hum-to-riff pipeline: record → track → quantize → render → loopable stem | SPEC-0008 | Backlog |
 | R-0009 | Beat builder: Euclidean drum templates with k/n sliders, synthesized kit | SPEC-0009 | Backlog |
 
@@ -108,9 +108,14 @@ plays it back, and runs a sample-accurate metronome driven by the beat grid;
 `gooz-dsp` transcribes a recorded take into note events. The math drives the
 sound, and the app can hear what you hummed.
 
-M2 is half-built: `gooz-dsp` now hears a take (**R-0005**) and snaps it onto the
-ratio grids (**R-0006** — pitch, onset, and duration all grid-locked). Next is
-**R-0007 — instrument render v0**: turn quantized notes into audio with a
-Karplus-Strong plucked string + a distortion FX chain (`gooz-synth`), the
-*output* side of voice-to-instrument, en route to the full hum→riff pipeline
-(R-0008).
+M2 is mostly built: `gooz-dsp` hears a take (**R-0005**), snaps it onto the ratio
+grids (**R-0006**), and `gooz-synth` renders those notes as a Karplus-Strong
+guitar through a distortion FX (**R-0007**). Every piece of the hum→riff chain
+now exists as a tested unit — they just aren't wired together yet.
+
+Next is **R-0008 — the hum→riff pipeline**: record → track (R-0005) → quantize
+(R-0006) → render (R-0007) → a loopable stem, end to end. This is the first time
+the product premise is fully playable. (Its spec should carry an explicit
+acceptance criterion bounding/validating note onset times — the guard R-0007
+deferred to the engine-wiring step.) Then **R-0009** (beat builder) rounds out
+M2.
