@@ -1,6 +1,6 @@
 # SPEC-0008 — Hum-to-riff pipeline
 
-- **Status:** Accepted
+- **Status:** Implemented — QA PASS, architect APPROVE
 - **Realizes:** R-0008
 - **Author:** Claude (owner: Gustavo Delgadillo)
 - **Created:** 2026-06-21
@@ -146,17 +146,17 @@ None — settled in the decision log.
 Maps to R-0008 AC1–AC7; qa owns `apps/gooz-studio/tests/acceptance_r0008.rs`
 (pure pipeline; no device).
 
-- [ ] AC1 — synthesized two-tone hum → non-empty bounded stem + grid-locked notes
+- [x] AC1 — synthesized two-tone hum → non-empty bounded stem + grid-locked notes
       matching the hummed pitches.
-- [ ] AC2 — stem length == `bars · bar_samples`; `bars ≥ 1` for a non-empty riff;
+- [x] AC2 — stem length == `bars · bar_samples`; `bars ≥ 1` for a non-empty riff;
       length `≥` raw render length (padding only). Exercise a **multi-bar** riff
       (raw length > one bar) so the `div_ceil` path is covered, not just `bars=1`.
-- [ ] AC3 — outcome exposes the transcription + the quantized notes; counts/
+- [x] AC3 — outcome exposes the transcription + the quantized notes; counts/
       pitches reflect the hum.
-- [ ] AC4 — empty / zero-rate / non-finite samples → typed `DspError`; no panic.
-- [ ] AC5 — deterministic: identical inputs → identical stem samples + notes.
-- [ ] AC6 — stem bounded in `[-1, 1]`, no NaN/inf.
-- [ ] AC7 — by-ear demo; doc examples; four gates green.
+- [x] AC4 — empty / zero-rate / non-finite samples → typed `DspError`; no panic.
+- [x] AC5 — deterministic: identical inputs → identical stem samples + notes.
+- [x] AC6 — stem bounded in `[-1, 1]`, no NaN/inf.
+- [x] AC7 — by-ear demo; doc examples; four gates green.
 
 ## 7. Decision log
 

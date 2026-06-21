@@ -44,7 +44,7 @@ The signature loop: hum → distorted guitar riff, end to end.
 | R-0005 | Pitch tracking (YIN) + onset detection over a recorded take | SPEC-0005 | Done |
 | R-0006 | Snap-to-grid: quantize tracked pitches/onsets onto frequency & beat ratio grids | SPEC-0006 | Done |
 | R-0007 | Instrument render v0: Karplus-Strong guitar + distortion FX chain | SPEC-0007 | Done |
-| R-0008 | Hum-to-riff pipeline: record → track → quantize → render → loopable stem | SPEC-0008 | Backlog |
+| R-0008 | Hum-to-riff pipeline: record → track → quantize → render → loopable stem | SPEC-0008 | Done |
 | R-0009 | Beat builder: Euclidean drum templates with k/n sliders, synthesized kit | SPEC-0009 | Backlog |
 
 ### M3 — Sessions
@@ -108,14 +108,12 @@ plays it back, and runs a sample-accurate metronome driven by the beat grid;
 `gooz-dsp` transcribes a recorded take into note events. The math drives the
 sound, and the app can hear what you hummed.
 
-M2 is mostly built: `gooz-dsp` hears a take (**R-0005**), snaps it onto the ratio
-grids (**R-0006**), and `gooz-synth` renders those notes as a Karplus-Strong
-guitar through a distortion FX (**R-0007**). Every piece of the hum→riff chain
-now exists as a tested unit — they just aren't wired together yet.
+**The hum→riff loop is real.** `gooz-studio` now wires the whole chain
+(**R-0008**): `hum_to_riff` records → transcribes (R-0005) → snaps to the grids
+(R-0006) → renders a guitar (R-0007) → a bar-aligned loopable stem, returning
+what it heard alongside the audio. `cargo run -p gooz-studio` records a hum and
+loops back the distorted-guitar riff — the product premise, end to end.
 
-Next is **R-0008 — the hum→riff pipeline**: record → track (R-0005) → quantize
-(R-0006) → render (R-0007) → a loopable stem, end to end. This is the first time
-the product premise is fully playable. (Its spec should carry an explicit
-acceptance criterion bounding/validating note onset times — the guard R-0007
-deferred to the engine-wiring step.) Then **R-0009** (beat builder) rounds out
-M2.
+Only **R-0009 — beat builder** remains in M2: Euclidean drum templates (`E(k,n)`
+from R-0002) with k/n "sparse↔busy" sliders, played by a synthesized kit. After
+that M2 is complete and M3 (sessions: save/load, arrangement, export) begins.
