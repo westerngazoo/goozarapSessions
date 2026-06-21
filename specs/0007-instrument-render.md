@@ -25,7 +25,9 @@ crates/gooz-synth/src/
 ├── string.rs      KarplusString — the plucked-string voice (private)
 ├── distortion.rs  Distortion enum + apply()
 ├── render.rs      RenderConfig + render_notes()
-└── lib.rs         re-export Distortion, RenderConfig, render_notes
+└── lib.rs         re-export Distortion, RenderConfig, render_notes,
+                  and `pub use gooz_dsp::{QuantizedNote, Ratio};` — without these
+                  an external caller cannot construct `render_notes`'s input
 ```
 
 ### `KarplusString` (string.rs, private)
