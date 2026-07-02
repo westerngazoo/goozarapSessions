@@ -158,8 +158,8 @@ impl PitchGrid {
             let position = (degree.num() as f64 / degree.den() as f64).log2();
             for adjust in [-1.0, 0.0, 1.0] {
                 let distance = (frac - (position + adjust)).abs();
-                // Tie-break to the lower pitch (smaller position + adjust), or
-                // if distance is strictly smaller.
+                // Tie-break to the lower pitch (smaller position + adjust), or if
+                // distance is strictly smaller.
                 if distance < best_distance - 1e-12 {
                     best_distance = distance;
                     best_degree = degree;

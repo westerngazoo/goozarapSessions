@@ -6,9 +6,13 @@
 //! selectable [`Distortion`] (soft- or hard-clip) FX. Excitation is a fixed-seed
 //! PRNG, so a given note list always renders the same buffer.
 //!
-//! Bounded responsibility: notes → instrument audio. No device I/O, no
-//! transport, no analysis. Realizes R-0007 / SPEC-0007; later requirements add
-//! more instruments and FX, and wire this into the engine (R-0008).
+//! [`build_beat`] (R-0009) turns Euclidean `E(k, n)` specs into a bar-aligned,
+//! loopable drum stem (kick / snare / hat) plus the per-voice hit maps for UI
+//! sliders.
+//!
+//! Bounded responsibility: notes → instrument audio; rhythms → drum stems. No
+//! device I/O, no transport, no analysis. Realizes R-0007 / SPEC-0007 and
+//! R-0009 / SPEC-0009.
 //!
 //! ```
 //! use gooz_synth::{render_notes, QuantizedNote, Ratio, RenderConfig};
@@ -31,9 +35,9 @@ mod distortion;
 mod render;
 mod string;
 
-pub use beat::{build_beat, BeatOutcome, BeatVoice, DrumVoiceConfig};
+pub use beat::{BeatOutcome, BeatVoice, DrumVoiceConfig, build_beat};
 pub use distortion::Distortion;
-pub use render::{render_notes, RenderConfig};
+pub use render::{RenderConfig, render_notes};
 
 // Re-exported so callers can construct `render_notes`'s `QuantizedNote` input
 // (and read its `degree`) naming only `gooz-synth`.

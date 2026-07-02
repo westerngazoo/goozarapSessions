@@ -35,7 +35,7 @@ ratio-locked beat and record/play the user's voice.
 | R-0003 | Audio engine v0: device I/O, lock-free graph, record a take / play it back | SPEC-0003 | Done |
 | R-0004 | Ratio-locked transport: metronome and click track driven by the beat grid | SPEC-0004 | Done |
 
-### M2 — Easy Mode voice-to-riff
+### M2 — Easy Mode voice-to-riff  ·  *complete*
 
 The signature loop: hum → distorted guitar riff, end to end.
 
@@ -45,7 +45,7 @@ The signature loop: hum → distorted guitar riff, end to end.
 | R-0006 | Snap-to-grid: quantize tracked pitches/onsets onto frequency & beat ratio grids | SPEC-0006 | Done |
 | R-0007 | Instrument render v0: Karplus-Strong guitar + distortion FX chain | SPEC-0007 | Done |
 | R-0008 | Hum-to-riff pipeline: record → track → quantize → render → loopable stem | SPEC-0008 | Done |
-| R-0009 | Beat builder: Euclidean drum templates with k/n sliders, synthesized kit | SPEC-0009 | Backlog |
+| R-0009 | Beat builder: Euclidean drum templates with k/n sliders, synthesized kit | SPEC-0009 | Done |
 
 ### M3 — Sessions
 
@@ -108,12 +108,7 @@ plays it back, and runs a sample-accurate metronome driven by the beat grid;
 `gooz-dsp` transcribes a recorded take into note events. The math drives the
 sound, and the app can hear what you hummed.
 
-**The hum→riff loop is real.** `gooz-studio` now wires the whole chain
-(**R-0008**): `hum_to_riff` records → transcribes (R-0005) → snaps to the grids
-(R-0006) → renders a guitar (R-0007) → a bar-aligned loopable stem, returning
-what it heard alongside the audio. `cargo run -p gooz-studio` records a hum and
-loops back the distorted-guitar riff — the product premise, end to end.
-
-Only **R-0009 — beat builder** remains in M2: Euclidean drum templates (`E(k,n)`
-from R-0002) with k/n "sparse↔busy" sliders, played by a synthesized kit. After
-that M2 is complete and M3 (sessions: save/load, arrangement, export) begins.
+**M2 is complete.** The hum→riff loop (**R-0008**) and the beat builder (**R-0009**)
+are both implemented and merged. `gooz-studio` records a hum, loops back a
+distorted-guitar riff, then plays a Euclidean drum loop — melody and groove,
+end to end. **M3 (sessions: save/load, arrangement, export) is next.**

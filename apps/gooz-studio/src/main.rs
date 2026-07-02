@@ -10,8 +10,8 @@ use std::time::Duration;
 
 use gooz_audio::{AudioBackend, CpalBackend, Engine, Take};
 use gooz_dsp::{PitchGrid, Tempo};
-use gooz_studio::{hum_to_riff, PipelineConfig};
-use gooz_synth::{build_beat, BeatVoice, DrumVoiceConfig};
+use gooz_studio::{PipelineConfig, hum_to_riff};
+use gooz_synth::{BeatVoice, DrumVoiceConfig, build_beat};
 
 const RECORD_SECS: u64 = 4;
 const LOOPS: usize = 4;

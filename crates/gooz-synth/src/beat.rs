@@ -64,27 +64,33 @@ impl Lcg {
 
 /// Builds a drum loop from a set of voice configurations.
 ///
-/// Converts each `DrumVoiceConfig` into a Euclidean `Pattern` and renders it over
-/// a single bar timeline. Renders individual hits using simple synthesis methods,
-/// mixes them into a single mono buffer, and wraps decay tails across the loop
-/// boundary so the end seamlessly wraps into the beginning.
+/// Converts each [`DrumVoiceConfig`] into a Euclidean [`Pattern`] and renders it
+/// over a single bar timeline. Individual hits use deterministic synthesis;
+/// decay tails that cross the loop boundary wrap to the start of the bar.
+/// An all-silent voice set, or `sample_rate == 0`, yields an empty stem with
+/// `bars == 0` (same `bars == 0 ⇔ samples.is_empty()` invariant as R-0008's riff stem).
+///
+/// ```
+/// use gooz_ratio::Tempo;
+/// use gooz_synth::{build_beat, BeatVoice, DrumVoiceConfig};
+///
+/// let tempo = Tempo::new(120.0, 4.0).unwrap();
+/// let voices = vec![DrumVoiceConfig {
+///     voice: BeatVoice::Kick,
+///     k: 3,
+///     n: 8,
+///     rotation: 0,
+/// }];
+/// let beat = build_beat(&voices, &tempo, 48_000).unwrap();
+/// assert_eq!(beat.bars, 1);
+/// assert_eq!(beat.patterns[0].onset_count(), 3);
+/// assert!(beat.samples.iter().all(|s| s.is_finite() && s.abs() <= 1.0));
+/// ```
 pub fn build_beat(
     voices: &[DrumVoiceConfig],
     tempo: &Tempo,
     sample_rate: u32,
 ) -> Result<BeatOutcome, BeatError> {
-    if sample_rate == 0 {
-        return Ok(BeatOutcome {
-            samples: Vec::new(),
-            sample_rate,
-            bars: 0,
-            patterns: voices
-                .iter()
-                .map(|_| Pattern::euclidean(1, 1).unwrap())
-                .collect(), // will be overwritten properly below
-        });
-    }
-
     let mut patterns = Vec::with_capacity(voices.len());
     let mut all_silent = true;
 
@@ -96,7 +102,7 @@ pub fn build_beat(
         patterns.push(pattern);
     }
 
-    if all_silent {
+    if all_silent || sample_rate == 0 {
         return Ok(BeatOutcome {
             samples: Vec::new(),
             sample_rate,

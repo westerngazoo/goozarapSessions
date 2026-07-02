@@ -1,6 +1,6 @@
 # SPEC-0009 — Beat builder
 
-- **Status:** Draft
+- **Status:** Accepted
 - **Realizes:** R-0009
 - **Author:** Jules
 - **Created:** 2026-06-28
@@ -88,14 +88,14 @@ None.
 
 ## 6. Acceptance criteria
 
-- [ ] AC1: Correct hit placement via `Pattern::euclidean`.
-- [ ] AC2: Synthesizes Kick, Snare, and Hat deterministically.
-- [ ] AC3: `k`, `n`, and `rotation` modify the pattern count and placement correctly.
-- [ ] AC4: Seamless wrapping of decay tails across `bars * bar_samples` boundary.
-- [ ] AC5: Returns `BeatOutcome` exposing stem and `patterns`.
-- [ ] AC6: Deterministic rendering across runs.
-- [ ] AC7: Samples bounded to `[-1, 1]` without NaN/inf.
-- [ ] AC8: Docs and a functional demo.
+- [x] AC1: Correct hit placement via `Pattern::euclidean`.
+- [x] AC2: Synthesizes Kick, Snare, and Hat deterministically.
+- [x] AC3: `k`, `n`, and `rotation` modify the pattern count and placement correctly.
+- [x] AC4: Seamless wrapping of decay tails across `bars * bar_samples` boundary.
+- [x] AC5: Returns `BeatOutcome` exposing stem and `patterns`.
+- [x] AC6: Deterministic rendering across runs.
+- [x] AC7: Samples bounded to `[-1, 1]` without NaN/inf.
+- [x] AC8: Docs and a functional demo.
 
 ## 7. Decision log
 
