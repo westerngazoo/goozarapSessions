@@ -167,8 +167,118 @@ async function togglePlay() {
   btn.textContent = "◼ stop";
 }
 
+// ---- beat builder (sparse↔busy) ----
+let beatNode = null;
+let beatPlaying = false;
+
+function busyValue() {
+  return Number(document.getElementById("busyRng").value);
+}
+
+// E(k, n) via Bjorklund — mirrors gooz-ratio, for the browser preview fallback.
+function euclid(k, n) {
+  if (n <= 0) return [];
+  if (k <= 0) return Array(n).fill(false);
+  if (k >= n) return Array(n).fill(true);
+  let filled = Array.from({ length: k }, () => [true]);
+  let rest = Array.from({ length: n - k }, () => [false]);
+  while (rest.length > 1) {
+    const pairs = Math.min(filled.length, rest.length);
+    const next = [];
+    for (let i = 0; i < pairs; i++) next.push(filled[i].concat(rest[i]));
+    const left = filled.length > pairs ? filled.slice(pairs) : rest.slice(pairs);
+    filled = next; rest = left;
+  }
+  return filled.concat(rest).flat();
+}
+function rotate(steps, by) {
+  const n = steps.length; if (!n) return steps;
+  const s = ((by % n) + n) % n;
+  return steps.slice(n - s).concat(steps.slice(0, n - s));
+}
+function scale(min, max, b) { return Math.round(min + (max - min) * (b / 100)); }
+
+// Backend beat when Tauri is present; otherwise a client-side synth so the
+// button still works in a plain browser preview.
+async function fetchBeat(busy) {
+  if (invoke) return invoke("beat", { busy });
+  await wait(120);
+  return synthBeat(busy);
+}
+function synthBeat(busy) {
+  const sr = 48000, bpm = 92, beatsPerBar = 4, bars = 2, steps = 16;
+  const barSamples = Math.round((60 / bpm) * beatsPerBar * sr);
+  const total = barSamples * bars;
+  const out = new Float32Array(total);
+  const lanes = [
+    { name: "kick", k: scale(2, 8, busy), rot: 0, lvl: 1.0 },
+    { name: "snare", k: scale(2, 4, busy), rot: 4, lvl: 0.9 },
+    { name: "hat", k: scale(4, 16, busy), rot: 0, lvl: 0.7 },
+  ];
+  const hit = (buf, at, name, lvl) => {
+    const dur = name === "hat" ? 0.05 : name === "snare" ? 0.15 : 0.2;
+    const len = Math.floor(dur * sr);
+    for (let i = 0; i < len && at + i < buf.length; i++) {
+      const t = i / sr;
+      let s;
+      if (name === "kick") s = Math.sin(2 * Math.PI * (55 + 110 * Math.exp(-t * 12)) * t) * Math.exp(-t * 10);
+      else if (name === "snare") s = (Math.random() * 2 - 1) * 0.7 * Math.exp(-t * 18);
+      else s = (Math.random() * 2 - 1) * Math.exp(-t * 40);
+      buf[at + i] += s * lvl;
+    }
+  };
+  for (let b = 0; b < bars; b++) {
+    for (const ln of lanes) {
+      const pat = rotate(euclid(ln.k, steps), ln.rot);
+      for (let s = 0; s < steps; s++) {
+        if (!pat[s]) continue;
+        hit(out, b * barSamples + Math.round((s / steps) * barSamples), ln.name, ln.lvl);
+      }
+    }
+  }
+  let peak = 0; for (const x of out) peak = Math.max(peak, Math.abs(x));
+  if (peak > 0) for (let i = 0; i < out.length; i++) out[i] /= peak;
+  return {
+    sampleRate: sr, bars, seconds: total / sr,
+    voices: lanes.map((l) => ({ name: l.name, onsets: l.k, steps })),
+    samples: Array.from(out),
+  };
+}
+
+function showLanes(voices) {
+  document.getElementById("beatLanes").textContent =
+    (voices || []).map((v) => `${v.name} ${v.onsets}/${v.steps}`).join("  ·  ");
+}
+function stopBeat() {
+  if (beatNode) { try { beatNode.stop(); } catch (_) {} beatNode = null; }
+  beatPlaying = false;
+  document.getElementById("beatBtn").textContent = "▶ beat";
+}
+async function playBeat() {
+  const data = await fetchBeat(busyValue());
+  showLanes(data.voices);
+  audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+  await audioCtx.resume();
+  const buf = audioCtx.createBuffer(1, data.samples.length, data.sampleRate);
+  buf.copyToChannel(Float32Array.from(data.samples), 0);
+  if (beatNode) { try { beatNode.stop(); } catch (_) {} }
+  beatNode = audioCtx.createBufferSource();
+  beatNode.buffer = buf;
+  beatNode.loop = true;
+  beatNode.connect(audioCtx.destination);
+  beatNode.start();
+  beatPlaying = true;
+  document.getElementById("beatBtn").textContent = "◼ beat";
+}
+async function toggleBeat() {
+  if (beatPlaying) return stopBeat();
+  await playBeat();
+}
+
 // ---- wire ----
 document.getElementById("recBtn").addEventListener("click", onRecord);
 document.getElementById("demoLink").addEventListener("click", (e) => { e.preventDefault(); demo().then(showResult); });
 document.getElementById("playBtn").addEventListener("click", togglePlay);
 document.getElementById("redoBtn").addEventListener("click", reset);
+document.getElementById("beatBtn").addEventListener("click", toggleBeat);
+document.getElementById("busyRng").addEventListener("input", () => { if (beatPlaying) playBeat(); });

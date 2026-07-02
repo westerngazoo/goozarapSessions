@@ -14,7 +14,9 @@ use std::thread::{sleep, JoinHandle};
 use std::time::Duration;
 
 use gooz_audio::{AudioBackend, CpalBackend, Engine};
-use gooz_studio::{RiffView, demo_riff as demo_riff_view, riff_from_take};
+use gooz_studio::{
+    BeatView, RiffView, beat_view as beat_view_impl, demo_riff as demo_riff_view, riff_from_take,
+};
 use tauri::State;
 
 /// Max seconds of microphone audio buffered per take.
@@ -36,6 +38,12 @@ struct Recorder(Mutex<Option<Capture>>);
 #[tauri::command]
 fn demo_riff() -> RiffView {
     demo_riff_view()
+}
+
+/// Builds an Easy-Mode beat at the given sparse↔busy density (`0..=100`).
+#[tauri::command]
+fn beat(busy: u8) -> BeatView {
+    beat_view_impl(busy)
 }
 
 /// Begins capturing from the default input device. No-op if already recording.
@@ -86,6 +94,7 @@ fn main() {
         .manage(Recorder::default())
         .invoke_handler(tauri::generate_handler![
             demo_riff,
+            beat,
             record_start,
             record_stop_analyze
         ])

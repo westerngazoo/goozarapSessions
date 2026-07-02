@@ -9,7 +9,10 @@ use serde::Serialize;
 
 use gooz_dsp::{DspError, PitchGrid, Tempo};
 
-use crate::{PipelineConfig, RiffOutcome, hum_to_riff};
+use crate::{
+    BeatConfig, BeatStem, BeatVoiceSpec, DrumKind, PipelineConfig, RiffOutcome, build_beat,
+    hum_to_riff,
+};
 
 /// How many points the waveform is downsampled to for drawing.
 const WAVE_BUCKETS: usize = 600;
@@ -109,6 +112,129 @@ pub fn demo_riff() -> RiffView {
     riff_from_take(&hum, sample_rate).expect("the demo hum is a valid, finite, non-empty signal")
 }
 
+/// How many bars the beat builder loops in the shell.
+const BEAT_BARS: u32 = 2;
+/// The shared step resolution (`n` in `E(k, n)`) for every drum voice.
+const BEAT_STEPS: u32 = 16;
+
+/// One drum lane, as shown under the beat builder.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct VoiceView {
+    /// Human-readable voice name (`kick`, `snare`, `hat`).
+    pub name: String,
+    /// Euclidean onset count `k` (what the sparse↔busy slider moves).
+    pub onsets: u32,
+    /// Euclidean step count `n`.
+    pub steps: u32,
+}
+
+/// A beat prepared for the UI: the lanes, a waveform envelope, and raw samples.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BeatView {
+    /// Sample rate of `samples`, in Hz.
+    pub sample_rate: u32,
+    /// Length of the loop in whole bars.
+    pub bars: u32,
+    /// Duration of the loop in seconds.
+    pub seconds: f64,
+    /// The drum lanes and their `E(k, n)` densities.
+    pub voices: Vec<VoiceView>,
+    /// A peak-envelope downsample of the beat, for the waveform canvas.
+    pub wave: Vec<f32>,
+    /// The raw mono beat samples, for Web Audio playback.
+    pub samples: Vec<f32>,
+}
+
+/// Builds an Easy-Mode beat whose density follows a single `busy` control
+/// (`0..=100`, the sparse↔busy slider): each drum voice's `E(k, 16)` onset
+/// count scales between a sparse floor and a busy ceiling. Deterministic and
+/// device-free.
+pub fn beat_view(busy: u8) -> BeatView {
+    let voices = beat_specs(busy);
+    let cfg = BeatConfig {
+        voices: voices.clone(),
+        bars: BEAT_BARS,
+    };
+    // build_beat only errors on invalid E(k, n); beat_specs keeps k <= 16 = n.
+    let stem = build_beat(&easy_mode_tempo(), 48_000, &cfg)
+        .expect("beat_specs always produces valid E(k, 16) patterns");
+    BeatView::from_stem(&stem, &voices)
+}
+
+/// The shell's default beat (sparse↔busy at the slider's mid setting).
+pub fn demo_beat() -> BeatView {
+    beat_view(55)
+}
+
+impl BeatView {
+    fn from_stem(stem: &BeatStem, voices: &[BeatVoiceSpec]) -> BeatView {
+        let seconds = if stem.sample_rate == 0 {
+            0.0
+        } else {
+            stem.samples.len() as f64 / f64::from(stem.sample_rate)
+        };
+        BeatView {
+            sample_rate: stem.sample_rate,
+            bars: stem.bars,
+            seconds,
+            voices: voices.iter().map(VoiceView::from_spec).collect(),
+            wave: peak_envelope(&stem.samples, WAVE_BUCKETS),
+            samples: stem.samples.clone(),
+        }
+    }
+}
+
+impl VoiceView {
+    fn from_spec(spec: &BeatVoiceSpec) -> VoiceView {
+        VoiceView {
+            name: drum_name(spec.kind).to_string(),
+            onsets: spec.onsets,
+            steps: spec.steps,
+        }
+    }
+}
+
+fn drum_name(kind: DrumKind) -> &'static str {
+    match kind {
+        DrumKind::Kick => "kick",
+        DrumKind::Snare => "snare",
+        DrumKind::HiHat => "hat",
+    }
+}
+
+/// Maps the `busy` slider onto each voice's onset count over 16 steps: the kick
+/// and hat open up with density while the snare stays near the backbeat.
+fn beat_specs(busy: u8) -> Vec<BeatVoiceSpec> {
+    let scale = |min: u32, max: u32| -> u32 {
+        let b = f64::from(busy.min(100)) / 100.0;
+        (f64::from(min) + (f64::from(max - min) * b)).round() as u32
+    };
+    vec![
+        BeatVoiceSpec {
+            kind: DrumKind::Kick,
+            onsets: scale(2, 8),
+            steps: BEAT_STEPS,
+            rotate: 0,
+            level: 1.0,
+        },
+        BeatVoiceSpec {
+            kind: DrumKind::Snare,
+            onsets: scale(2, 4),
+            steps: BEAT_STEPS,
+            rotate: 4,
+            level: 0.9,
+        },
+        BeatVoiceSpec {
+            kind: DrumKind::HiHat,
+            onsets: scale(4, 16),
+            steps: BEAT_STEPS,
+            rotate: 0,
+            level: 0.7,
+        },
+    ]
+}
+
 fn easy_mode_grid() -> PitchGrid {
     PitchGrid::harmonic(GRID_ROOT_HZ, GRID_HARMONICS).expect("220 Hz harmonic grid is valid")
 }
@@ -193,5 +319,51 @@ mod tests {
             riff_from_take(&[], 48_000),
             Err(DspError::EmptySignal)
         ));
+    }
+
+    #[test]
+    fn demo_beat_has_three_voices_and_audio() {
+        let beat = demo_beat();
+        assert_eq!(beat.voices.len(), 3);
+        assert_eq!(
+            beat.voices
+                .iter()
+                .map(|v| v.name.as_str())
+                .collect::<Vec<_>>(),
+            ["kick", "snare", "hat"]
+        );
+        assert!(beat.bars >= 1 && beat.seconds > 0.0);
+        assert!(!beat.samples.is_empty());
+    }
+
+    #[test]
+    fn beat_is_bounded_and_downsampled() {
+        let beat = demo_beat();
+        assert!(beat.samples.iter().all(|s| s.is_finite() && s.abs() <= 1.0));
+        assert!(!beat.wave.is_empty() && beat.wave.len() <= WAVE_BUCKETS);
+        assert!(
+            beat.wave
+                .iter()
+                .all(|w| w.is_finite() && (0.0..=1.0).contains(w))
+        );
+    }
+
+    #[test]
+    fn busy_slider_increases_total_onsets() {
+        let sparse: u32 = beat_view(0).voices.iter().map(|v| v.onsets).sum();
+        let busy: u32 = beat_view(100).voices.iter().map(|v| v.onsets).sum();
+        assert!(busy > sparse, "busy={busy} should exceed sparse={sparse}");
+    }
+
+    #[test]
+    fn beat_view_is_deterministic() {
+        assert_eq!(beat_view(70), beat_view(70));
+    }
+
+    #[test]
+    fn beat_serializes_to_camel_case_json() {
+        let json = serde_json::to_string(&demo_beat()).expect("BeatView serializes");
+        assert!(json.contains("\"sampleRate\""));
+        assert!(json.contains("\"voices\"") && json.contains("\"onsets\""));
     }
 }

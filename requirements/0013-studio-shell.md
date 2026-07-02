@@ -71,6 +71,7 @@ None for v0 — settled in the decision log.
 | 2026-07-01 | Keep a **deviceless `demo_riff` command** beside the live-mic path | Makes the shell testable in CI and previewable without a mic; the live path is by-ear on a real machine (consistent with R-0003/R-0008 demos). |
 | 2026-07-01 | **Vanilla** HTML/CSS/JS frontend; **Web Audio** playback | Smallest thing that looks right and runs with no build toolchain; playback in the browser avoids a second audio path in v0. |
 | 2026-07-01 | Backend commands are **thin wrappers** over `gooz-studio` lib + `gooz-audio` | The shell adds a seam, not logic; all music code stays in the reviewed crates. |
+| 2026-07-02 | Extend the v0 slice to wire the **beat builder (R-0009)** into the shell with a functional sparse↔busy slider | R-0009 merged to `main`, so the shell can now expose both halves of Easy Mode; the `busy` slider drives real `E(k, n)` density. Session/arrangement/export (M3) remain out of scope. |
 
 ## Changelog
 

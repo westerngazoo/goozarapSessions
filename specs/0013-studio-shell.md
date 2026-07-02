@@ -47,11 +47,21 @@ downsampled to a 600-point peak envelope (`wave`) for the canvas.
 
 ### `src-tauri` (excluded crate)
 
-Three thin commands over the tested backend:
+Thin commands over the tested backend:
 
 - `demo_riff()` → `gooz_studio::demo_riff()` (no mic)
+- `beat(busy)` → `gooz_studio::beat_view(busy)` — Euclidean beat at a density
 - `record_start()` → spawns a `cpal` capture thread (cpal streams are `!Send`)
 - `record_stop_analyze()` → joins the thread, `gooz_studio::riff_from_take(...)`
+
+### Beat builder in the shell (R-0009 wired in)
+
+`view::beat_view(busy)` maps the sparse↔busy slider (`0..=100`) onto each drum
+voice's `E(k, 16)` onset count (kick 2→8, snare 2→4, hat 4→16), calls
+`build_beat`, and returns a `BeatView` (lanes + waveform envelope + samples).
+The frontend plays it on its own looping Web Audio node, independent of the
+riff, and re-renders live as the slider moves. A browser-only Bjorklund + click
+synth mirrors the backend so the beat works in preview without Tauri.
 
 The crate carries its own `[workspace]` table and is listed in the root
 workspace `exclude`, so `cargo *--workspace*` never builds the webview runtime.
@@ -88,6 +98,7 @@ tests.
 |------|----------|-----------|
 | 2026-07-02 | Integrate the parallel R-0013 v0 shell on top of merged R-0009 | Keeps the beat builder and the UI shell both on `main`; the shell wraps R-0008 today and gains the beat builder when wired later. |
 | 2026-07-02 | DTO/view logic in the workspace lib; only the IPC bridge in `src-tauri` | The reviewed gate covers the music logic; the excluded crate stays a thin, webview-only seam. |
+| 2026-07-02 | Wire the beat builder (R-0009) into the shell: `beat_view` + `beat` command + a functional sparse↔busy slider | Makes the second half of Easy Mode clickable; the slider now drives real `E(k, n)` density instead of being a visual stub. |
 
 ## Changelog
 

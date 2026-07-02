@@ -22,4 +22,6 @@ mod view;
 pub use beat::{BeatConfig, BeatStem, BeatVoiceSpec, build_beat};
 pub use gooz_synth::{DrumKind, Pattern};
 pub use pipeline::{PipelineConfig, RiffOutcome, RiffStem, hum_to_riff};
-pub use view::{NoteView, RiffView, demo_riff, riff_from_take};
+pub use view::{
+    BeatView, NoteView, RiffView, VoiceView, beat_view, demo_beat, demo_riff, riff_from_take,
+};

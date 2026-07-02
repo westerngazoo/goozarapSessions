@@ -50,8 +50,12 @@
         <input type="range" min="0" max="100" value="30" class="rng cyan" /><span>tense</span>
       </label>
       <label class="slider"><span>sparse</span>
-        <input type="range" min="0" max="100" value="55" class="rng pink" /><span>busy</span>
+        <input id="busyRng" type="range" min="0" max="100" value="55" class="rng pink" /><span>busy</span>
       </label>
+      <div class="beatbar">
+        <button id="beatBtn" class="btn beat">▶ beat</button>
+        <span id="beatLanes" class="beatlanes"></span>
+      </div>
     </footer>
 
     <script src="fixture.js"></script>

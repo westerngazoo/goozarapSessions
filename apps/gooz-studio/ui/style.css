@@ -119,4 +119,9 @@ body.listening .rec { box-shadow: 0 0 0 1px rgba(255, 45, 111, 0.8), 0 0 90px rg
 .rng.cyan::-webkit-slider-thumb { background: var(--cyan); box-shadow: var(--glow) var(--cyan); }
 .rng.pink::-webkit-slider-thumb { background: var(--pink); box-shadow: var(--glow) var(--pink); }
 
+.beatbar { display: flex; align-items: center; gap: 14px; }
+.btn.beat { border-color: var(--pink); color: var(--pink); box-shadow: 0 0 22px rgba(236, 72, 153, 0.28); }
+.btn.beat:hover { background: rgba(236, 72, 153, 0.1); }
+.beatlanes { font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--dim); }
+
 @media (max-width: 640px) { .prompt { font-size: 26px; } .rec { width: 150px; height: 150px; } }
