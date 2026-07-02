@@ -10,6 +10,9 @@ members = [
     "crates/gooz-lyrics",
     "apps/gooz-studio",
 ]
+# The Tauri desktop shell (R-0013) pulls the heavy webview runtime; it is built
+# with `cargo tauri` on a desktop, not by the workspace merge gate.
+exclude = ["apps/gooz-studio/src-tauri"]
 
 [workspace.package]
 version = "0.1.0"
@@ -25,3 +28,5 @@ gooz-synth = { path = "crates/gooz-synth" }
 gooz-session = { path = "crates/gooz-session" }
 gooz-model = { path = "crates/gooz-model" }
 gooz-lyrics = { path = "crates/gooz-lyrics" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
