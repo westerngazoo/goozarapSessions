@@ -1,0 +1,28 @@
+[package]
+name = "gooz-studio-desktop"
+version = "0.1.0"
+edition = "2021"
+description = "goozarapSessions Easy Mode desktop shell (Tauri) — R-0013 v0"
+license = "MIT"
+
+# This crate is EXCLUDED from the root workspace (see root Cargo.toml): it pulls
+# the heavy webview runtime and is built with `cargo tauri dev` / `cargo run` on
+# a desktop, not by the `cargo *--workspace*` merge gate.
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+serde = { version = "1", features = ["derive"] }
+gooz-studio = { path = ".." }
+gooz-audio = { path = "../../../crates/gooz-audio" }
+
+[[bin]]
+name = "gooz-studio-desktop"
+path = "src/main.rs"
+
+# Its own workspace root: this crate lives inside the repo tree but is not a
+# member of the root workspace (which excludes it), so it needs this to resolve
+# standalone under `cargo run`/`cargo check`.
+[workspace]

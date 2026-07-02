@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>goozarap · sessions</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div class="grid-bg" aria-hidden="true"></div>
+
+    <header class="topbar">
+      <div class="wordmark">gooza<span>rap</span><em>sessions</em></div>
+      <div class="session-tag">SESSION <b>001</b></div>
+    </header>
+
+    <main class="stage">
+      <!-- first run -->
+      <section id="intro" class="intro">
+        <p class="prompt">hum something<span class="cursor">_</span></p>
+        <button id="recBtn" class="rec" aria-label="record">
+          <span class="ring"></span>
+          <span class="dot"></span>
+          <span class="label">hum</span>
+        </button>
+        <p class="hint">
+          tap &amp; hum a melody — no theory, just a sound.
+          <a href="#" id="demoLink">or hear a demo ▶</a>
+        </p>
+      </section>
+
+      <!-- result -->
+      <section id="result" class="result hidden">
+        <h2 class="heard">esto escuché</h2>
+        <div id="notes" class="notes"></div>
+        <div class="wavewrap">
+          <canvas id="wave" width="1100" height="220"></canvas>
+          <div id="barlabels" class="barlabels"></div>
+        </div>
+        <div class="controls">
+          <button id="playBtn" class="btn play">▶ play loop</button>
+          <button id="redoBtn" class="btn ghost">↺ redo</button>
+          <span id="meta" class="meta"></span>
+        </div>
+      </section>
+    </main>
+
+    <footer class="sliders">
+      <label class="slider"><span>smooth</span>
+        <input id="tenseRng" type="range" min="0" max="100" value="30" class="rng cyan" /><span>tense</span>
+      </label>
+      <label class="slider"><span>sparse</span>
+        <input id="busyRng" type="range" min="0" max="100" value="55" class="rng pink" /><span>busy</span>
+      </label>
+      <div class="beatbar">
+        <button id="beatBtn" class="btn beat">▶ beat</button>
+        <span id="beatLanes" class="beatlanes"></span>
+      </div>
+    </footer>
+
+    <script src="fixture.js"></script>
+    <script src="main.js"></script>
+  </body>
+</html>

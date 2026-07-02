@@ -310,6 +310,8 @@ dependencies = [
  "gooz-dsp",
  "gooz-ratio",
  "gooz-synth",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
