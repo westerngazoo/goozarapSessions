@@ -72,9 +72,10 @@ fn record_start(recorder: State<'_, Recorder>) -> Result<(), String> {
     Ok(())
 }
 
-/// Stops capture, runs the Easy Mode pipeline on the take, and returns the riff.
+/// Stops capture, runs the Easy Mode pipeline on the take at the given
+/// smooth↔tense setting, and returns the riff.
 #[tauri::command]
-fn record_stop_analyze(recorder: State<'_, Recorder>) -> Result<RiffView, String> {
+fn record_stop_analyze(recorder: State<'_, Recorder>, tense: u8) -> Result<RiffView, String> {
     let capture = recorder
         .0
         .lock()
@@ -86,7 +87,7 @@ fn record_stop_analyze(recorder: State<'_, Recorder>) -> Result<RiffView, String
         .handle
         .join()
         .map_err(|_| "recording thread panicked".to_string())??;
-    riff_from_take(&samples, sample_rate).map_err(|e| e.to_string())
+    riff_from_take(&samples, sample_rate, tense).map_err(|e| e.to_string())
 }
 
 fn main() {

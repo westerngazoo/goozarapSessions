@@ -16,9 +16,15 @@ use crate::{
 
 /// How many points the waveform is downsampled to for drawing.
 const WAVE_BUCKETS: usize = 600;
-/// Easy Mode's default grid root (Hz) and harmonic-series size.
+/// Easy Mode's grid root (Hz).
 const GRID_ROOT_HZ: f64 = 220.0;
-const GRID_HARMONICS: u64 = 9;
+/// The smooth↔tense slider walks the harmonic-series odd-limit between these
+/// bounds: smooth = just the fifth (simple ratios), tense = up to the 15th
+/// harmonic (denser, more complex ratios).
+const TENSE_MIN_ODD: u64 = 3;
+const TENSE_MAX_ODD: u64 = 15;
+/// The slider position used by [`demo_riff`].
+const DEFAULT_TENSE: u8 = 30;
 /// Easy Mode's default tempo (BPM) and beats per bar.
 const TEMPO_BPM: f64 = 92.0;
 const BEATS_PER_BAR: f64 = 4.0;
@@ -89,27 +95,39 @@ impl RiffView {
     }
 }
 
-/// Runs Easy Mode's standard pipeline (220 Hz harmonic grid, 92 BPM) on a
-/// recorded take and returns a UI view. Propagates analysis errors (empty /
-/// zero-rate / non-finite input) as a typed [`DspError`].
-pub fn riff_from_take(samples: &[f32], sample_rate: u32) -> Result<RiffView, DspError> {
+/// Runs Easy Mode's pipeline (220 Hz harmonic grid, 92 BPM) on a recorded take
+/// and returns a UI view. The `tense` control (`0..=100`, the smooth↔tense
+/// slider) sets the harmonic-series odd-limit: smoother grids favour simple
+/// ratios, tenser grids admit more complex ones. Propagates analysis errors
+/// (empty / zero-rate / non-finite input) as a typed [`DspError`].
+pub fn riff_from_take(samples: &[f32], sample_rate: u32, tense: u8) -> Result<RiffView, DspError> {
     let outcome = hum_to_riff(
         samples,
         sample_rate,
-        &easy_mode_grid(),
+        &easy_mode_grid(tense),
         &easy_mode_tempo(),
         &PipelineConfig::default(),
     )?;
     Ok(RiffView::from_outcome(&outcome))
 }
 
-/// The built-in demo: a synthesized four-tone hum through the standard pipeline.
-/// Deterministic and device-free — powers the shell's "hear a demo" button and
-/// makes the shell previewable without a microphone.
+/// The built-in demo: a synthesized four-tone hum through the standard pipeline
+/// at the default smooth↔tense setting. Deterministic and device-free — powers
+/// the shell's "hear a demo" button and makes it previewable without a mic.
 pub fn demo_riff() -> RiffView {
     let sample_rate = 48_000u32;
     let hum = demo_hum(sample_rate);
-    riff_from_take(&hum, sample_rate).expect("the demo hum is a valid, finite, non-empty signal")
+    riff_from_take(&hum, sample_rate, DEFAULT_TENSE)
+        .expect("the demo hum is a valid, finite, non-empty signal")
+}
+
+/// Maps the smooth↔tense slider onto the harmonic-series odd-limit: `0` → the
+/// simplest grid ([`TENSE_MIN_ODD`]), `100` → the densest ([`TENSE_MAX_ODD`]),
+/// stepping through the odd harmonics in between.
+fn odd_limit_for(tense: u8) -> u64 {
+    let b = f64::from(tense.min(100)) / 100.0;
+    let rungs = (TENSE_MAX_ODD - TENSE_MIN_ODD) / 2;
+    TENSE_MIN_ODD + 2 * (b * rungs as f64).round() as u64
 }
 
 /// How many bars the beat builder loops in the shell.
@@ -235,8 +253,9 @@ fn beat_specs(busy: u8) -> Vec<BeatVoiceSpec> {
     ]
 }
 
-fn easy_mode_grid() -> PitchGrid {
-    PitchGrid::harmonic(GRID_ROOT_HZ, GRID_HARMONICS).expect("220 Hz harmonic grid is valid")
+fn easy_mode_grid(tense: u8) -> PitchGrid {
+    PitchGrid::harmonic(GRID_ROOT_HZ, odd_limit_for(tense))
+        .expect("a harmonic grid with odd_limit >= 3 is valid")
 }
 
 fn easy_mode_tempo() -> Tempo {
@@ -316,9 +335,39 @@ mod tests {
     #[test]
     fn riff_from_take_rejects_empty_input() {
         assert!(matches!(
-            riff_from_take(&[], 48_000),
+            riff_from_take(&[], 48_000, DEFAULT_TENSE),
             Err(DspError::EmptySignal)
         ));
+    }
+
+    #[test]
+    fn tense_slider_walks_the_odd_limit() {
+        assert_eq!(odd_limit_for(0), TENSE_MIN_ODD);
+        assert_eq!(odd_limit_for(100), TENSE_MAX_ODD);
+        // Monotonic non-decreasing across the range.
+        let mut prev = 0;
+        for t in (0..=100).step_by(5) {
+            let ol = odd_limit_for(t);
+            assert!(ol >= prev, "odd_limit dropped at tense={t}");
+            assert!(ol % 2 == 1, "odd_limit stays odd at tense={t}");
+            prev = ol;
+        }
+    }
+
+    #[test]
+    fn tenser_grid_has_at_least_as_many_degrees() {
+        let sr = 48_000u32;
+        let hum = demo_hum(sr);
+        let smooth = riff_from_take(&hum, sr, 0).unwrap();
+        let tense = riff_from_take(&hum, sr, 100).unwrap();
+        // A tenser grid never snaps the same hum to fewer distinct ratios.
+        let distinct = |v: &RiffView| {
+            let mut r: Vec<(u64, u64)> = v.notes.iter().map(|n| (n.num, n.den)).collect();
+            r.sort();
+            r.dedup();
+            r.len()
+        };
+        assert!(distinct(&tense) >= distinct(&smooth));
     }
 
     #[test]

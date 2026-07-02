@@ -99,6 +99,7 @@ tests.
 | 2026-07-02 | Integrate the parallel R-0013 v0 shell on top of merged R-0009 | Keeps the beat builder and the UI shell both on `main`; the shell wraps R-0008 today and gains the beat builder when wired later. |
 | 2026-07-02 | DTO/view logic in the workspace lib; only the IPC bridge in `src-tauri` | The reviewed gate covers the music logic; the excluded crate stays a thin, webview-only seam. |
 | 2026-07-02 | Wire the beat builder (R-0009) into the shell: `beat_view` + `beat` command + a functional sparse↔busy slider | Makes the second half of Easy Mode clickable; the slider now drives real `E(k, n)` density instead of being a visual stub. |
+| 2026-07-02 | Wire the smooth↔tense slider onto the harmonic-series odd-limit (3→15) via `riff_from_take(.., tense)` | Turns the last visual-stub slider into a real control: smoother grids favour simple ratios, tenser grids admit complex ones. |
 
 ## Changelog
 

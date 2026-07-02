@@ -51,8 +51,8 @@ fn records_a_hum_through_the_mock_device_and_makes_a_riff() {
         "the mock device captures the hum losslessly"
     );
 
-    let view =
-        riff_from_take(take.samples(), take.sample_rate()).expect("a non-empty hum yields a riff");
+    let view = riff_from_take(take.samples(), take.sample_rate(), 30)
+        .expect("a non-empty hum yields a riff");
     assert!(view.bars >= 1, "a non-empty riff is at least one bar");
     assert!(!view.notes.is_empty(), "the hummed tones are heard");
     assert!(
@@ -74,7 +74,7 @@ fn silence_through_the_mock_device_yields_no_riff() {
     driver.feed_input(&silence);
     let take = engine.stop_recording();
 
-    let view = riff_from_take(take.samples(), take.sample_rate())
+    let view = riff_from_take(take.samples(), take.sample_rate(), 30)
         .expect("silence is a valid, finite signal");
     assert_eq!(view.bars, 0, "no onsets → no riff → zero bars");
     assert!(view.samples.is_empty(), "an empty riff has no samples");

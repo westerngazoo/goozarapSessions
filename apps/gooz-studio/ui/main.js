@@ -13,6 +13,10 @@ let busy = false;
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
+function tenseValue() {
+  return Number(document.getElementById("tenseRng").value);
+}
+
 async function demo() {
   if (invoke) return invoke("demo_riff");
   await wait(380); // pretend to think
@@ -30,7 +34,7 @@ async function onRecord() {
     if (invoke) {
       await invoke("record_start");
       await wait(3500); // ~3.5s to hum a melody
-      showResult(await invoke("record_stop_analyze"));
+      showResult(await invoke("record_stop_analyze", { tense: tenseValue() }));
     } else {
       await wait(1500);
       showResult(await demo());
