@@ -1,18 +1,32 @@
 //! Local ML — per-song / per-album influence models.
 //!
-//! The model registry (one model directory per song, stored inside its
-//! session), the feature-extraction pipeline (tempo & beat-ratio profiles,
-//! ratio/harmony histograms, timbre embeddings, section structure, lyrical
-//! style), on-device training of small adapters (DDSP-style timbre decoders,
-//! LoRA on a small lyric LM, beat-conditioning vectors), and inference APIs:
-//! timbre transfer, beat suggestion, lyric continuation. On-device Whisper
-//! transcription also lives here.
+//! This crate owns the influence-model lifecycle: the **registry** (this
+//! requirement, R-0014), then feature extraction (R-0015), on-device training of
+//! small adapters (R-0016), and inference — timbre transfer, beat suggestion,
+//! lyric continuation (R-0017/R-0018, M5). It will also host on-device Whisper.
 //!
-//! Framework: candle (Rust-native), with ONNX Runtime (`ort`) as a fallback
-//! behind the same API. Honesty rule: models *bias* the deterministic ratio
-//! math, they never replace it — everything works untrained from neutral
-//! defaults.
+//! Today it implements the [`ModelRegistry`]: one directory per model, stored
+//! inside a session (`<session>/models/`), each with an inspectable
+//! [`ModelManifest`]. It is pure — `serde` + `std::fs`, no ML dependency — until
+//! training (R-0016) pulls in candle.
 //!
-//! Bounded responsibility: ML lifecycle. Never runs on the audio thread.
+//! Honesty rule (ARCHITECTURE §5): models *bias* the deterministic ratio math,
+//! they never replace it — everything works untrained from neutral defaults.
+//! Never runs on the audio thread.
 //!
-//! Implementation lands per accepted requirement + spec (see `ROADMAP.md`).
+//! ```
+//! use gooz_model::{ModelKind, ModelRegistry};
+//!
+//! let dir = std::env::temp_dir().join(format!("gooz_model_doctest_{}", std::process::id()));
+//! let reg = ModelRegistry::open(&dir).unwrap();
+//! let handle = reg.create("warm guitar", ModelKind::Timbre).unwrap();
+//! assert_eq!(handle.id(), "warm-guitar");
+//! assert_eq!(reg.list().unwrap().len(), 1);
+//! # std::fs::remove_dir_all(&dir).ok();
+//! ```
+
+mod error;
+mod registry;
+
+pub use error::ModelError;
+pub use registry::{MODEL_FORMAT_VERSION, ModelHandle, ModelKind, ModelManifest, ModelRegistry};

@@ -66,7 +66,7 @@ The per-song creative brain, trained locally.
 
 | Req | Capability | Spec | Status |
 |-----|------------|------|--------|
-| R-0014 | Model registry: per-song/per-album model dirs inside the session | SPEC-0014 | Backlog |
+| R-0014 | Model registry: per-song/per-album model dirs inside the session | SPEC-0014 | In review |
 | R-0015 | Ingest & feature extraction: tempo/ratio profiles, timbre embeddings, structure from reference tracks | SPEC-0015 | Backlog |
 | R-0016 | On-device training of adapters (DDSP timbre decoder first) with progress UI | SPEC-0016 | Backlog |
 | R-0017 | Timbre transfer: render a hummed take through a trained timbre model | SPEC-0017 | Backlog |
