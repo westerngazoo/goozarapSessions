@@ -91,6 +91,26 @@ Freestyle support: beat, ears, and a rhyme brain.
 > tolerance controls on quantization. Requirements to be drafted once M2's
 > Easy Mode loop has real-world feedback.
 
+### M7 — AI music director (describe → music)
+
+Describe what you want in words — "dark trap around 140", "warm lofi melody",
+"make my voice a broken robot" — and the app produces it. **Local-first**: a
+small on-device model turns the description into an inspectable `MusicalIntent`
+that steers the existing ratio/beat/synth engine (biased by the influence model,
+M4); it never generates raw audio and never leaves the device. Design in
+[`docs/ai-music-direction.md`](docs/ai-music-direction.md).
+
+| Req | Capability | Spec | Status |
+|-----|------------|------|--------|
+| R-0025 | Describe → `MusicalIntent`: natural-language description parsed into structured musical intent (tempo, feel, genre, structure, energy, timbre, mood) | SPEC-0025 | Backlog |
+| R-0026 | Genre & style preset library (trap + general): intent → concrete ratio/beat/synth parameters, ratio-native and data-driven | SPEC-0026 | Backlog |
+| R-0027 | Description-conditioned generation: melody + beat from the intent via the engine (R-0001/2/7/9), biased by the influence model | SPEC-0027 | Backlog |
+| R-0028 | Voice transformation ("voz distortion"): recorded voice → character/timbre via DSP (formant/pitch, waveshaping) + DDSP timbre transfer (R-0017) | SPEC-0028 | Backlog |
+| R-0029 | "Describe" prompt UI in the studio shell: text/voice prompt → generated stems on the timeline | SPEC-0029 | Backlog |
+
+**Depends on:** M4 (influence models / `gooz-model`), R-0009 (beat builder, for
+genre grooves), R-0017 (timbre transfer, for voice), R-0013 (shell, for the UI).
+
 ## Sequencing rules
 
 - A requirement enters `Discussing` only when every requirement it depends on is
