@@ -24,8 +24,10 @@
 //! assert_eq!(Song::from_json(&json).unwrap(), song);
 //! ```
 
+mod arrangement;
 mod error;
 mod model;
 
+pub use arrangement::{Arrangement, LoopRegion, Section, StemPlacement};
 pub use error::SessionError;
 pub use model::{FORMAT_VERSION, Settings, Song, Stem, StemKind, Take};

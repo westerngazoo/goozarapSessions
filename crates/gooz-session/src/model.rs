@@ -4,6 +4,7 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
+use crate::arrangement::{Arrangement, LoopRegion, Section, StemPlacement};
 use crate::error::SessionError;
 
 /// The session file format version stamped into every [`Song`].
@@ -74,6 +75,9 @@ pub struct Song {
     pub takes: Vec<Take>,
     /// Rendered stems on the timeline.
     pub stems: Vec<Stem>,
+    /// How the stems are laid out in time (sections, loop, placements).
+    #[serde(default)]
+    pub arrangement: Arrangement,
     /// Opaque reference to the song's influence model (M4); `None` until trained.
     pub model_ref: Option<String>,
 }
@@ -95,6 +99,7 @@ impl Song {
             settings,
             takes: Vec::new(),
             stems: Vec::new(),
+            arrangement: Arrangement::default(),
             model_ref: None,
         }
     }
@@ -109,6 +114,36 @@ impl Song {
     pub fn with_stem(mut self, stem: Stem) -> Song {
         self.stems.push(stem);
         self
+    }
+
+    /// Appends an arrangement section (builder style).
+    pub fn with_section(mut self, section: Section) -> Song {
+        self.arrangement.sections.push(section);
+        self
+    }
+
+    /// Sets the arrangement's loop region (builder style).
+    pub fn with_loop(mut self, loop_region: LoopRegion) -> Song {
+        self.arrangement.loop_region = Some(loop_region);
+        self
+    }
+
+    /// Appends a stem placement (builder style).
+    pub fn with_placement(mut self, placement: StemPlacement) -> Song {
+        self.arrangement.placements.push(placement);
+        self
+    }
+
+    /// Validates the arrangement against this song's stems.
+    ///
+    /// ```
+    /// use gooz_session::{Settings, Song};
+    ///
+    /// let s = Settings { bpm: 92.0, beats_per_bar: 4.0, root_hz: 220.0, odd_limit: 9 };
+    /// assert!(Song::new("empty", s).validate().is_ok());
+    /// ```
+    pub fn validate(&self) -> Result<(), SessionError> {
+        self.arrangement.validate(self.stems.len())
     }
 
     /// Serializes the song to pretty JSON.

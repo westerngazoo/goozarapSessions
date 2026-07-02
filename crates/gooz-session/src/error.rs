@@ -17,6 +17,8 @@ pub enum SessionError {
     Serialize(String),
     /// The session file was missing fields or was not valid session JSON.
     Deserialize(String),
+    /// The arrangement was structurally invalid (bad span, stem index, or level).
+    InvalidArrangement(String),
 }
 
 impl fmt::Display for SessionError {
@@ -25,6 +27,7 @@ impl fmt::Display for SessionError {
             SessionError::Io(m) => write!(f, "session i/o failed: {m}"),
             SessionError::Serialize(m) => write!(f, "session serialization failed: {m}"),
             SessionError::Deserialize(m) => write!(f, "session could not be read: {m}"),
+            SessionError::InvalidArrangement(m) => write!(f, "invalid arrangement: {m}"),
         }
     }
 }
