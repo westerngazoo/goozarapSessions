@@ -10,3 +10,7 @@ license.workspace = true
 gooz-dsp.workspace = true
 gooz-audio.workspace = true
 gooz-synth.workspace = true
+serde.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
