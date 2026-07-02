@@ -8,3 +8,4 @@ license.workspace = true
 
 [dependencies]
 gooz-dsp.workspace = true
+gooz-ratio.workspace = true

@@ -5,11 +5,21 @@ version.workspace = true
 edition.workspace = true
 repository.workspace = true
 license.workspace = true
+default-run = "gooz-studio"
+
+[[bin]]
+name = "gooz-studio"
+path = "src/main.rs"
+
+[[bin]]
+name = "beat"
+path = "src/bin/beat.rs"
 
 [dependencies]
 gooz-dsp.workspace = true
 gooz-audio.workspace = true
 gooz-synth.workspace = true
+gooz-ratio.workspace = true
 serde.workspace = true
 
 [dev-dependencies]
