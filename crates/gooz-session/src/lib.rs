@@ -1,11 +1,31 @@
 //! The project model.
 //!
-//! A `Song` is stems, takes, an arrangement (sections as bar-ratio spans),
-//! tempo/ratio settings, and a reference to its per-song influence model.
-//! This crate owns session serialization, the on-disk project directory
-//! layout (including the song's model artifacts), and WAV/stem export.
+//! A [`Song`] is its [`Settings`] (tempo + grid), its [`Take`]s (recorded
+//! audio), and its [`Stem`]s (rendered loopable parts — riffs and beats), plus
+//! a `model_ref` reserved for its per-song influence model (M4). The song
+//! serializes losslessly to JSON and back ([`Song::save`] / [`Song::load`]).
 //!
-//! Bounded responsibility: persistence and structure of a session. No audio
-//! processing, no rendering, no ML execution.
+//! Bounded responsibility: the persistence and structure of a session. No audio
+//! processing, no rendering, no ML execution. Realizes R-0010 / SPEC-0010;
+//! arrangement (R-0011) and mixdown/export (R-0012) build on this model.
 //!
-//! Implementation lands per accepted requirement + spec (see `ROADMAP.md`).
+//! ```
+//! use gooz_session::{Settings, Song, Stem, StemKind};
+//!
+//! let settings = Settings { bpm: 92.0, beats_per_bar: 4.0, root_hz: 220.0, odd_limit: 9 };
+//! let song = Song::new("session 001", settings).with_stem(Stem {
+//!     name: "riff".into(),
+//!     kind: StemKind::Riff,
+//!     sample_rate: 48_000,
+//!     bars: 2,
+//!     samples: vec![0.0, 0.1, -0.1],
+//! });
+//! let json = song.to_json().unwrap();
+//! assert_eq!(Song::from_json(&json).unwrap(), song);
+//! ```
+
+mod error;
+mod model;
+
+pub use error::SessionError;
+pub use model::{FORMAT_VERSION, Settings, Song, Stem, StemKind, Take};

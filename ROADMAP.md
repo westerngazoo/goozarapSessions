@@ -55,7 +55,7 @@ A song is a real, savable, exportable thing.
 
 | Req | Capability | Spec | Status |
 |-----|------------|------|--------|
-| R-0010 | Session format: song = stems + takes + arrangement + settings, save/load | SPEC-0010 | Backlog |
+| R-0010 | Session format: song = stems + takes + arrangement + settings, save/load | SPEC-0010 | In review |
 | R-0011 | Arrangement: sections as bar spans, loop regions, stem mute/level | SPEC-0011 | Backlog |
 | R-0012 | Mixdown & export: WAV master + per-stem export | SPEC-0012 | Backlog |
 | R-0013 | Studio shell v0: Tauri app wrapping M1–M3 (record button, sliders, timeline) | SPEC-0013 | Backlog |
