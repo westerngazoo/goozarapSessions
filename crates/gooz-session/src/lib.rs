@@ -26,8 +26,10 @@
 
 mod arrangement;
 mod error;
+mod export;
 mod model;
 
 pub use arrangement::{Arrangement, LoopRegion, Section, StemPlacement};
 pub use error::SessionError;
+pub use export::Mixdown;
 pub use model::{FORMAT_VERSION, Settings, Song, Stem, StemKind, Take};

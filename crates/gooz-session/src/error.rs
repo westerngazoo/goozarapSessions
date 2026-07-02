@@ -19,6 +19,8 @@ pub enum SessionError {
     Deserialize(String),
     /// The arrangement was structurally invalid (bad span, stem index, or level).
     InvalidArrangement(String),
+    /// Mixdown or WAV export failed (e.g. mismatched stem sample rates).
+    Export(String),
 }
 
 impl fmt::Display for SessionError {
@@ -28,6 +30,7 @@ impl fmt::Display for SessionError {
             SessionError::Serialize(m) => write!(f, "session serialization failed: {m}"),
             SessionError::Deserialize(m) => write!(f, "session could not be read: {m}"),
             SessionError::InvalidArrangement(m) => write!(f, "invalid arrangement: {m}"),
+            SessionError::Export(m) => write!(f, "export failed: {m}"),
         }
     }
 }
