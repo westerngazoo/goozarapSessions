@@ -174,6 +174,7 @@ async function togglePlay() {
 // ---- beat builder (sparse↔busy) ----
 let beatNode = null;
 let beatPlaying = false;
+let lastBeat = null; // the most recent BeatView, for save/export
 
 function busyValue() {
   return Number(document.getElementById("busyRng").value);
@@ -260,6 +261,7 @@ function stopBeat() {
 }
 async function playBeat() {
   const data = await fetchBeat(busyValue());
+  lastBeat = data;
   showLanes(data.voices);
   audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
   await audioCtx.resume();
@@ -279,6 +281,34 @@ async function toggleBeat() {
   await playBeat();
 }
 
+// ---- save / export (gooz-session) ----
+function toast(msg, ok = true) {
+  const t = document.getElementById("toast");
+  t.textContent = msg;
+  t.classList.remove("hidden");
+  t.classList.toggle("err", !ok);
+}
+function sessionName() {
+  return "session " + new Date().toISOString().slice(0, 19).replace("T", " ");
+}
+async function saveOrExport(cmd, label) {
+  if (!current && !lastBeat) return toast("nothing to save yet — hum or build a beat", false);
+  if (!invoke) return toast("open the desktop app to " + label, false);
+  const args = {
+    name: sessionName(),
+    tense: tenseValue(),
+    busy: busyValue(),
+    riff: current || null,
+    beat: lastBeat || null,
+  };
+  try {
+    const path = await invoke(cmd, args);
+    toast(label + " → " + path);
+  } catch (e) {
+    toast(label + " failed: " + e, false);
+  }
+}
+
 // ---- wire ----
 document.getElementById("recBtn").addEventListener("click", onRecord);
 document.getElementById("demoLink").addEventListener("click", (e) => { e.preventDefault(); demo().then(showResult); });
@@ -286,3 +316,5 @@ document.getElementById("playBtn").addEventListener("click", togglePlay);
 document.getElementById("redoBtn").addEventListener("click", reset);
 document.getElementById("beatBtn").addEventListener("click", toggleBeat);
 document.getElementById("busyRng").addEventListener("input", () => { if (beatPlaying) playBeat(); });
+document.getElementById("saveBtn").addEventListener("click", () => saveOrExport("save_session", "saved session"));
+document.getElementById("exportBtn").addEventListener("click", () => saveOrExport("export_master", "exported wav"));

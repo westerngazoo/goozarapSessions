@@ -13,9 +13,12 @@ use std::sync::{Arc, Mutex};
 use std::thread::{sleep, JoinHandle};
 use std::time::Duration;
 
+use std::path::PathBuf;
+
 use gooz_audio::{AudioBackend, CpalBackend, Engine};
 use gooz_studio::{
-    BeatView, RiffView, beat_view as beat_view_impl, demo_riff as demo_riff_view, riff_from_take,
+    BeatView, RiffView, beat_view as beat_view_impl, demo_riff as demo_riff_view,
+    export_master as export_master_impl, riff_from_take, save_session as save_session_impl,
 };
 use tauri::State;
 
@@ -44,6 +47,43 @@ fn demo_riff() -> RiffView {
 #[tauri::command]
 fn beat(busy: u8) -> BeatView {
     beat_view_impl(busy)
+}
+
+/// Where sessions and exports are written: `~/goozarapSessions` (falling back to
+/// the system temp dir if `$HOME` is unset).
+fn sessions_dir() -> PathBuf {
+    let base = std::env::var_os("HOME")
+        .map(PathBuf::from)
+        .unwrap_or_else(std::env::temp_dir);
+    base.join("goozarapSessions")
+}
+
+/// Saves the current riff/beat as a `.json` session; returns the written path.
+#[tauri::command]
+fn save_session(
+    name: String,
+    tense: u8,
+    busy: u8,
+    riff: Option<RiffView>,
+    beat: Option<BeatView>,
+) -> Result<String, String> {
+    save_session_impl(&sessions_dir(), &name, tense, busy, riff.as_ref(), beat.as_ref())
+        .map(|p| p.display().to_string())
+        .map_err(|e| e.to_string())
+}
+
+/// Mixes the current riff/beat and writes a master `.wav`; returns the path.
+#[tauri::command]
+fn export_master(
+    name: String,
+    tense: u8,
+    busy: u8,
+    riff: Option<RiffView>,
+    beat: Option<BeatView>,
+) -> Result<String, String> {
+    export_master_impl(&sessions_dir(), &name, tense, busy, riff.as_ref(), beat.as_ref())
+        .map(|p| p.display().to_string())
+        .map_err(|e| e.to_string())
 }
 
 /// Begins capturing from the default input device. No-op if already recording.
@@ -96,6 +136,8 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             demo_riff,
             beat,
+            save_session,
+            export_master,
             record_start,
             record_stop_analyze
         ])

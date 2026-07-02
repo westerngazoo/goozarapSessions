@@ -309,6 +309,7 @@ dependencies = [
  "gooz-audio",
  "gooz-dsp",
  "gooz-ratio",
+ "gooz-session",
  "gooz-synth",
  "serde",
  "serde_json",

@@ -73,6 +73,7 @@ None for v0 — settled in the decision log.
 | 2026-07-01 | Backend commands are **thin wrappers** over `gooz-studio` lib + `gooz-audio` | The shell adds a seam, not logic; all music code stays in the reviewed crates. |
 | 2026-07-02 | Extend the v0 slice to wire the **beat builder (R-0009)** into the shell with a functional sparse↔busy slider | R-0009 merged to `main`, so the shell can now expose both halves of Easy Mode; the `busy` slider drives real `E(k, n)` density. Session/arrangement/export (M3) remain out of scope. |
 | 2026-07-02 | Make the **smooth↔tense** slider functional (harmonic odd-limit 3→15) | The last stub slider now shapes the pitch grid the hum snaps to. |
+| 2026-07-02 | Wire **save session + export WAV** (R-0010/R-0011/R-0012) into the shell | Once M3's session/export landed, the shell can persist and export the current riff+beat as a song — completing the Easy Mode loop end to end. |
 
 ## Changelog
 

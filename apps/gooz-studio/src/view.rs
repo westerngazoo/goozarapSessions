@@ -5,9 +5,12 @@
 //! the samples. Keeping the logic here (not in the Tauri crate) means it is
 //! device-free and unit-tested by the workspace gate.
 
-use serde::Serialize;
+use std::path::{Path, PathBuf};
+
+use serde::{Deserialize, Serialize};
 
 use gooz_dsp::{DspError, PitchGrid, Tempo};
+use gooz_session::{Section, SessionError, Settings, Song, Stem, StemKind, StemPlacement};
 
 use crate::{
     BeatConfig, BeatStem, BeatVoiceSpec, DrumKind, PipelineConfig, RiffOutcome, build_beat,
@@ -30,7 +33,7 @@ const TEMPO_BPM: f64 = 92.0;
 const BEATS_PER_BAR: f64 = 4.0;
 
 /// One grid-locked note, as shown on a note card.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct NoteView {
     /// Ratio numerator (the `3` in `3:2`).
     pub num: u64,
@@ -46,7 +49,7 @@ pub struct NoteView {
 
 /// A riff prepared for the UI: what it heard, a waveform envelope to draw, and
 /// the raw samples to play.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RiffView {
     /// Sample rate of `samples`, in Hz.
@@ -136,7 +139,7 @@ const BEAT_BARS: u32 = 2;
 const BEAT_STEPS: u32 = 16;
 
 /// One drum lane, as shown under the beat builder.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct VoiceView {
     /// Human-readable voice name (`kick`, `snare`, `hat`).
     pub name: String,
@@ -147,7 +150,7 @@ pub struct VoiceView {
 }
 
 /// A beat prepared for the UI: the lanes, a waveform envelope, and raw samples.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BeatView {
     /// Sample rate of `samples`, in Hz.
@@ -293,6 +296,121 @@ fn peak_envelope(samples: &[f32], buckets: usize) -> Vec<f32> {
         .collect()
 }
 
+/// Assembles a saveable [`Song`] from what the shell is holding: the current
+/// slider settings plus an optional riff and/or beat. Each present part becomes
+/// a [`Stem`] placed at bar 0; a single section spans the longer of the two.
+pub fn build_song(
+    name: &str,
+    tense: u8,
+    busy: u8,
+    riff: Option<&RiffView>,
+    beat: Option<&BeatView>,
+) -> Song {
+    let settings = Settings {
+        bpm: TEMPO_BPM,
+        beats_per_bar: BEATS_PER_BAR,
+        root_hz: GRID_ROOT_HZ,
+        odd_limit: odd_limit_for(tense),
+    };
+    let _ = busy; // density is captured in the beat stem's samples already
+    let mut song = Song::new(name, settings);
+    let mut span_bars = 0u32;
+
+    if let Some(r) = riff.filter(|r| !r.samples.is_empty()) {
+        let idx = song.stems.len();
+        song = song
+            .with_stem(Stem {
+                name: "guitar".into(),
+                kind: StemKind::Riff,
+                sample_rate: r.sample_rate,
+                bars: r.bars,
+                samples: r.samples.clone(),
+            })
+            .with_placement(StemPlacement {
+                stem: idx,
+                start_bar: 0,
+                muted: false,
+                level: 1.0,
+            });
+        span_bars = span_bars.max(r.bars);
+    }
+
+    if let Some(b) = beat.filter(|b| !b.samples.is_empty()) {
+        let idx = song.stems.len();
+        song = song
+            .with_stem(Stem {
+                name: "drums".into(),
+                kind: StemKind::Beat,
+                sample_rate: b.sample_rate,
+                bars: b.bars,
+                samples: b.samples.clone(),
+            })
+            .with_placement(StemPlacement {
+                stem: idx,
+                start_bar: 0,
+                muted: false,
+                level: 0.9,
+            });
+        span_bars = span_bars.max(b.bars);
+    }
+
+    if span_bars > 0 {
+        song = song.with_section(Section {
+            name: "loop".into(),
+            start_bar: 0,
+            length_bars: span_bars,
+        });
+    }
+    song
+}
+
+/// Ensures `dir` exists and returns `dir/<sanitized name>.<ext>`.
+fn session_path(dir: &Path, name: &str, ext: &str) -> Result<PathBuf, SessionError> {
+    std::fs::create_dir_all(dir).map_err(|e| SessionError::Io(e.to_string()))?;
+    let stem: String = name
+        .chars()
+        .map(|c| if c.is_alphanumeric() { c } else { '_' })
+        .collect();
+    let stem = if stem.is_empty() {
+        "session".into()
+    } else {
+        stem
+    };
+    Ok(dir.join(format!("{stem}.{ext}")))
+}
+
+/// Saves the current riff/beat as a `.json` session under `dir`, returning the
+/// written path.
+pub fn save_session(
+    dir: &Path,
+    name: &str,
+    tense: u8,
+    busy: u8,
+    riff: Option<&RiffView>,
+    beat: Option<&BeatView>,
+) -> Result<PathBuf, SessionError> {
+    let song = build_song(name, tense, busy, riff, beat);
+    let path = session_path(dir, name, "json")?;
+    song.save(&path)?;
+    Ok(path)
+}
+
+/// Mixes the current riff/beat and writes a master `.wav` under `dir`, returning
+/// the written path.
+pub fn export_master(
+    dir: &Path,
+    name: &str,
+    tense: u8,
+    busy: u8,
+    riff: Option<&RiffView>,
+    beat: Option<&BeatView>,
+) -> Result<PathBuf, SessionError> {
+    let song = build_song(name, tense, busy, riff, beat);
+    let path = session_path(dir, name, "wav")?;
+    song.export_master(&path)?;
+    Ok(path)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -414,5 +532,47 @@ mod tests {
         let json = serde_json::to_string(&demo_beat()).expect("BeatView serializes");
         assert!(json.contains("\"sampleRate\""));
         assert!(json.contains("\"voices\"") && json.contains("\"onsets\""));
+    }
+
+    #[test]
+    fn build_song_captures_riff_and_beat_as_stems() {
+        let riff = demo_riff();
+        let beat = demo_beat();
+        let song = build_song("my song", 30, 55, Some(&riff), Some(&beat));
+        assert_eq!(song.stems.len(), 2);
+        assert_eq!(song.stems[0].kind, gooz_session::StemKind::Riff);
+        assert_eq!(song.stems[1].kind, gooz_session::StemKind::Beat);
+        assert_eq!(song.arrangement.placements.len(), 2);
+        assert!(song.validate().is_ok());
+        // The tense slider is reflected in the saved grid setting.
+        assert_eq!(song.settings.odd_limit, odd_limit_for(30));
+    }
+
+    #[test]
+    fn build_song_skips_empty_parts() {
+        let beat = demo_beat();
+        let song = build_song("beat only", 0, 55, None, Some(&beat));
+        assert_eq!(song.stems.len(), 1);
+        assert_eq!(song.stems[0].kind, gooz_session::StemKind::Beat);
+    }
+
+    #[test]
+    fn save_and_export_write_files() {
+        let riff = demo_riff();
+        let beat = demo_beat();
+        let mut dir = std::env::temp_dir();
+        dir.push(format!("gooz_studio_io_{}", std::process::id()));
+
+        let json = save_session(&dir, "take 1", 30, 55, Some(&riff), Some(&beat)).unwrap();
+        assert!(json.exists() && json.extension().unwrap() == "json");
+        let loaded = gooz_session::Song::load(&json).unwrap();
+        assert_eq!(loaded.stems.len(), 2);
+
+        let wav = export_master(&dir, "take 1", 30, 55, Some(&riff), Some(&beat)).unwrap();
+        assert!(wav.exists() && wav.extension().unwrap() == "wav");
+        let bytes = std::fs::metadata(&wav).unwrap().len();
+        assert!(bytes > 44, "a real WAV is larger than its 44-byte header");
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

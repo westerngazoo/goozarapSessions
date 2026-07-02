@@ -106,6 +106,8 @@ body.listening .rec { box-shadow: 0 0 0 1px rgba(255, 45, 111, 0.8), 0 0 90px rg
 .btn.ghost { border-color: var(--line); color: var(--dim); }
 .btn.ghost:hover { color: var(--text); }
 .meta { margin-left: auto; font-size: 11px; letter-spacing: 0.15em; color: var(--dim); }
+.toast { margin-top: 12px; font-size: 12px; letter-spacing: 0.04em; color: var(--cyan); word-break: break-all; }
+.toast.err { color: #f472b6; }
 
 /* sliders footer */
 .sliders {
