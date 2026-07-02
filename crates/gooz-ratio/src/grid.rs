@@ -3,6 +3,12 @@
 use crate::error::RatioError;
 use crate::ratio::Ratio;
 
+/// Log-frequency (octave) slack for [`PitchGrid::snap`]'s nearest-degree search.
+/// Far below one cent (`1/1200` octave ≈ `8.3e-4`) yet far above the `~1e-15`
+/// round-trip error of `powf`/`log2`, so exact ties resolve deterministically to
+/// the earlier candidate without affecting any musically distinct distance.
+const SNAP_TIE_EPS: f64 = 1e-9;
+
 /// The result of snapping a frequency onto a [`PitchGrid`].
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct SnappedPitch {
@@ -158,7 +164,11 @@ impl PitchGrid {
             let position = (degree.num() as f64 / degree.den() as f64).log2();
             for adjust in [-1.0, 0.0, 1.0] {
                 let distance = (frac - (position + adjust)).abs();
-                if distance < best_distance {
+                // A candidate must be closer by more than SNAP_TIE_EPS to win, so
+                // a mathematical tie deterministically keeps the earlier (lower-
+                // pitched) candidate rather than flipping on sub-cent float noise
+                // from the `powf`/`log2` round-trip.
+                if distance + SNAP_TIE_EPS < best_distance {
                     best_distance = distance;
                     best_degree = degree;
                     best_octave_adjust = adjust as i32;
