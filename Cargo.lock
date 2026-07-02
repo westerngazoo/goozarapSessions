@@ -306,6 +306,7 @@ version = "0.1.0"
 dependencies = [
  "gooz-audio",
  "gooz-dsp",
+ "gooz-ratio",
  "gooz-synth",
 ]
 
@@ -314,6 +315,7 @@ name = "gooz-synth"
 version = "0.1.0"
 dependencies = [
  "gooz-dsp",
+ "gooz-ratio",
 ]
 
 [[package]]

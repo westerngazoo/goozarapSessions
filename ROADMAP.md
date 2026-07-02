@@ -45,7 +45,7 @@ The signature loop: hum → distorted guitar riff, end to end.
 | R-0006 | Snap-to-grid: quantize tracked pitches/onsets onto frequency & beat ratio grids | SPEC-0006 | Done |
 | R-0007 | Instrument render v0: Karplus-Strong guitar + distortion FX chain | SPEC-0007 | Done |
 | R-0008 | Hum-to-riff pipeline: record → track → quantize → render → loopable stem | SPEC-0008 | Done |
-| R-0009 | Beat builder: Euclidean drum templates with k/n sliders, synthesized kit | SPEC-0009 | Backlog |
+| R-0009 | Beat builder: Euclidean drum templates with k/n sliders, synthesized kit | SPEC-0009 | In review |
 
 ### M3 — Sessions
 
@@ -99,21 +99,9 @@ Freestyle support: beat, ears, and a rhyme brain.
 
 ## Current focus
 
-**M1 is complete and merged to `main`**, and **M2 is underway** — `R-0001`
-(frequency ratios), `R-0002` (beat ratios), `R-0003` (audio engine v0), `R-0004`
-(ratio-locked metronome), and `R-0005` (pitch tracking + onset detection) are
-all implemented, QA-signed-off (PASS), architect-approved, and merged. The
-ratio core (pitch + rhythm) lives in `gooz-ratio`; `gooz-audio` records a take,
-plays it back, and runs a sample-accurate metronome driven by the beat grid;
-`gooz-dsp` transcribes a recorded take into note events. The math drives the
-sound, and the app can hear what you hummed.
-
-**The hum→riff loop is real.** `gooz-studio` now wires the whole chain
-(**R-0008**): `hum_to_riff` records → transcribes (R-0005) → snaps to the grids
-(R-0006) → renders a guitar (R-0007) → a bar-aligned loopable stem, returning
-what it heard alongside the audio. `cargo run -p gooz-studio` records a hum and
-loops back the distorted-guitar riff — the product premise, end to end.
-
-Only **R-0009 — beat builder** remains in M2: Euclidean drum templates (`E(k,n)`
-from R-0002) with k/n "sparse↔busy" sliders, played by a synthesized kit. After
-that M2 is complete and M3 (sessions: save/load, arrangement, export) begins.
+**M2 is nearly complete** — the hum→riff loop (R-0005 through R-0008) is merged and
+QA-signed-off. **R-0009 — beat builder** is implemented and in review: Euclidean
+`E(k,n)` templates for kick, snare, and hi-hat render to a bar-aligned loopable
+stem via `build_beat` / `render_beat`; try it with
+`cargo run -p gooz-studio --bin beat`. Once R-0009 merges, M2 is done and M3
+(sessions: save/load, arrangement, export) begins.
