@@ -45,7 +45,9 @@ The signature loop: hum → distorted guitar riff, end to end.
 | R-0006 | Snap-to-grid: quantize tracked pitches/onsets onto frequency & beat ratio grids | SPEC-0006 | Done |
 | R-0007 | Instrument render v0: Karplus-Strong guitar + distortion FX chain | SPEC-0007 | Done |
 | R-0008 | Hum-to-riff pipeline: record → track → quantize → render → loopable stem | SPEC-0008 | Done |
-| R-0009 | Beat builder: Euclidean drum templates with k/n sliders, synthesized kit | SPEC-0009 | In review |
+| R-0009 | Beat builder: Euclidean drum templates with k/n sliders, synthesized kit | SPEC-0009 | Done |
+
+### M2 — Easy Mode voice-to-riff  ·  *complete*
 
 ### M3 — Sessions
 
@@ -99,9 +101,7 @@ Freestyle support: beat, ears, and a rhyme brain.
 
 ## Current focus
 
-**M2 is nearly complete** — the hum→riff loop (R-0005 through R-0008) is merged and
-QA-signed-off. **R-0009 — beat builder** is implemented and in review: Euclidean
-`E(k,n)` templates for kick, snare, and hi-hat render to a bar-aligned loopable
-stem via `build_beat` / `render_beat`; try it with
-`cargo run -p gooz-studio --bin beat`. Once R-0009 merges, M2 is done and M3
-(sessions: save/load, arrangement, export) begins.
+**M2 is complete and merged to `main`.** The hum→riff loop (R-0005–R-0008) and the
+beat builder (R-0009) are both live: `cargo run -p gooz-studio` for hum→guitar,
+`cargo run -p gooz-studio --bin beat` for the drum loop. **M3 begins next** —
+session format (R-0010), arrangement, export, and the Tauri studio shell (R-0013).
