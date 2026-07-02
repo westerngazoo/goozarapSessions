@@ -1,7 +1,8 @@
-//! R-0008 demo (AC7): hum → distorted guitar riff, end to end.
+//! R-0008 & R-0009 demo: hum → distorted guitar riff, plus a beat loop.
 //!
 //! Records ~4 s from the default input, runs the [`hum_to_riff`] pipeline, and
-//! loops the rendered riff through the default output. Verified by ear on a real
+//! loops the rendered riff through the default output. Then synthesizes a beat
+//! using the new beat builder and loops it. Verified by ear on a real
 //! machine — not a CI test. Run with `cargo run -p gooz-studio`.
 
 use std::thread::sleep;
@@ -9,7 +10,8 @@ use std::time::Duration;
 
 use gooz_audio::{AudioBackend, CpalBackend, Engine, Take};
 use gooz_dsp::{PitchGrid, Tempo};
-use gooz_studio::{PipelineConfig, hum_to_riff};
+use gooz_studio::{hum_to_riff, PipelineConfig};
+use gooz_synth::{build_beat, BeatVoice, DrumVoiceConfig};
 
 const RECORD_SECS: u64 = 4;
 const LOOPS: usize = 4;
@@ -55,18 +57,58 @@ fn main() {
         outcome.notes.len(),
         outcome.stem.bars
     );
-    if outcome.stem.samples.is_empty() {
+
+    if !outcome.stem.samples.is_empty() {
+        let looped = loop_and_adapt(&outcome.stem.samples, out_channels, LOOPS);
+        let riff = Take::new(looped, outcome.stem.sample_rate, out_channels);
+        if let Err(err) = engine.start_playback(&riff) {
+            eprintln!("could not start playback: {err}");
+            return;
+        }
+        sleep(Duration::from_secs_f64(riff.duration_secs() + 0.3));
+    } else {
         eprintln!("no riff — no notes detected in the recording");
-        return;
     }
 
-    let looped = loop_and_adapt(&outcome.stem.samples, out_channels, LOOPS);
-    let riff = Take::new(looped, outcome.stem.sample_rate, out_channels);
-    if let Err(err) = engine.start_playback(&riff) {
+    println!("building beat loop...");
+    let voices = vec![
+        DrumVoiceConfig {
+            voice: BeatVoice::Kick,
+            k: 3,
+            n: 8,
+            rotation: 0,
+        },
+        DrumVoiceConfig {
+            voice: BeatVoice::Snare,
+            k: 2,
+            n: 8,
+            rotation: 4,
+        },
+        DrumVoiceConfig {
+            voice: BeatVoice::Hat,
+            k: 16,
+            n: 16,
+            rotation: 0,
+        },
+    ];
+
+    let beat = match build_beat(&voices, &tempo, sample_rate) {
+        Ok(beat) => beat,
+        Err(err) => {
+            eprintln!("beat builder failed: {err:?}");
+            return;
+        }
+    };
+
+    println!("playing beat {LOOPS}x...");
+    let looped_beat = loop_and_adapt(&beat.samples, out_channels, LOOPS);
+    let beat_take = Take::new(looped_beat, beat.sample_rate, out_channels);
+    if let Err(err) = engine.start_playback(&beat_take) {
         eprintln!("could not start playback: {err}");
         return;
     }
-    sleep(Duration::from_secs_f64(riff.duration_secs() + 0.3));
+    sleep(Duration::from_secs_f64(beat_take.duration_secs() + 0.3));
+
     println!("done.");
 }
 
