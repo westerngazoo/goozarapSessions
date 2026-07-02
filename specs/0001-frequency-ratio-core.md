@@ -208,7 +208,9 @@ tests, clippy `-D warnings` clean, fmt clean:
 | 2026-06-10 | `complexity`/`cents` return `f64` (not exact) | They are metrics for ordering/display; exactness lives in the rational representation, not in derived measures. |
 | 2026-06-10 | Grids always contain 1:1 | The root must always be a valid snap target; simplifies octave bookkeeping. |
 | 2026-06-10 | Architect review (REQUEST CHANGES) applied: canonical-preserving octave-step rule; reject non-finite log-quotient in `snap`; single pinned ratio→Hz formula + `hz` recomputed from `(degree, octave)`; gcd cross-cancellation in `stack`/`unstack`; even `odd_limit` bounds the odd set; ties snap to the lower pitch | Findings 1–6 of the architect's SPEC-0001 review — fixes keep AC1/AC3/AC6 actually testable and the lowest-terms invariant unbreakable. |
+| 2026-07-02 | `snap`'s nearest-degree search uses a `1e-9`-octave tie tolerance (`SNAP_TIE_EPS`) | The lower-pitch tie-break relied on exact float equality; `powf`/`log2` round-trip noise (`~1e-15`) could flip a mathematical tie under a newer rustc. The epsilon (far below one cent) restores deterministic tie-breaking without affecting any musically distinct distance. |
 
 ## Changelog
 
 - 2026-06-10 — created; accepted alongside R-0001.
+- 2026-07-02 — `snap` tie-break made float-robust (`SNAP_TIE_EPS`); no API change.
