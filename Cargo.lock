@@ -314,6 +314,7 @@ name = "gooz-synth"
 version = "0.1.0"
 dependencies = [
  "gooz-dsp",
+ "gooz-ratio",
 ]
 
 [[package]]

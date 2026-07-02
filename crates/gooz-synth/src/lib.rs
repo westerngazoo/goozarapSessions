@@ -26,12 +26,14 @@
 //! assert!(audio.iter().all(|s| s.is_finite() && s.abs() <= 1.0 + 1e-6));
 //! ```
 
+mod beat;
 mod distortion;
 mod render;
 mod string;
 
+pub use beat::{build_beat, BeatOutcome, BeatVoice, DrumVoiceConfig};
 pub use distortion::Distortion;
-pub use render::{RenderConfig, render_notes};
+pub use render::{render_notes, RenderConfig};
 
 // Re-exported so callers can construct `render_notes`'s `QuantizedNote` input
 // (and read its `degree`) naming only `gooz-synth`.
