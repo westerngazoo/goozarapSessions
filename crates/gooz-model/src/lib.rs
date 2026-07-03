@@ -26,7 +26,9 @@
 //! ```
 
 mod error;
+mod features;
 mod registry;
 
 pub use error::ModelError;
+pub use features::{FEATURE_FORMAT_VERSION, FeatureProfile, RatioWeight, extract_features};
 pub use registry::{MODEL_FORMAT_VERSION, ModelHandle, ModelKind, ModelManifest, ModelRegistry};

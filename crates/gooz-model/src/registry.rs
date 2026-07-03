@@ -6,12 +6,16 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use serde::{Deserialize, Serialize};
 
 use crate::error::ModelError;
+use crate::features::FeatureProfile;
 
 /// The manifest file format version stamped into every model.
 pub const MODEL_FORMAT_VERSION: u32 = 1;
 
 /// The manifest file name written inside each model directory.
 const MANIFEST: &str = "manifest.json";
+
+/// The feature-profile file name written inside a model directory (R-0015).
+const FEATURES: &str = "features.json";
 
 /// The family of influence model a directory holds.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -146,6 +150,29 @@ impl ModelRegistry {
             write_manifest(&dir, &manifest)?;
         }
         Ok(())
+    }
+
+    /// Writes a [`FeatureProfile`] into a model's directory as `features.json`
+    /// and records it in the manifest (R-0015).
+    pub fn write_features(&self, id: &str, profile: &FeatureProfile) -> Result<(), ModelError> {
+        let dir = self.dir(id);
+        if !dir.join(MANIFEST).exists() {
+            return Err(ModelError::NotFound(id.to_string()));
+        }
+        let json = serde_json::to_string_pretty(profile)
+            .map_err(|e| ModelError::Serialize(e.to_string()))?;
+        std::fs::write(dir.join(FEATURES), json).map_err(|e| ModelError::Io(e.to_string()))?;
+        self.manifest_add_file(id, FEATURES)
+    }
+
+    /// Reads a model's `features.json`, or [`ModelError::NotFound`].
+    pub fn read_features(&self, id: &str) -> Result<FeatureProfile, ModelError> {
+        let path = self.dir(id).join(FEATURES);
+        if !path.exists() {
+            return Err(ModelError::NotFound(id.to_string()));
+        }
+        let json = std::fs::read_to_string(&path).map_err(|e| ModelError::Io(e.to_string()))?;
+        serde_json::from_str(&json).map_err(|e| ModelError::Deserialize(e.to_string()))
     }
 
     /// Removes a model directory, or [`ModelError::NotFound`].

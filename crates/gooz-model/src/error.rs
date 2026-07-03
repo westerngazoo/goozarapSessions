@@ -22,6 +22,8 @@ pub enum ModelError {
     AlreadyExists(String),
     /// A model name produced no usable id (e.g. it was empty or all symbols).
     InvalidName(String),
+    /// Feature extraction from reference audio failed (propagated analysis error).
+    Extract(String),
 }
 
 impl fmt::Display for ModelError {
@@ -33,6 +35,7 @@ impl fmt::Display for ModelError {
             ModelError::NotFound(id) => write!(f, "no model '{id}' in the registry"),
             ModelError::AlreadyExists(id) => write!(f, "a model '{id}' already exists"),
             ModelError::InvalidName(n) => write!(f, "'{n}' is not a usable model name"),
+            ModelError::Extract(m) => write!(f, "feature extraction failed: {m}"),
         }
     }
 }
