@@ -11,7 +11,7 @@ requirement loop in [`CLAUDE.md`](CLAUDE.md) §4.
 
 ## Milestones
 
-### M0 — Foundation  ·  *in progress*
+### M0 — Foundation  ·  *complete*
 
 Adopt the methodology and prepare the repository.
 
@@ -35,7 +35,7 @@ ratio-locked beat and record/play the user's voice.
 | R-0003 | Audio engine v0: device I/O, lock-free graph, record a take / play it back | SPEC-0003 | Done |
 | R-0004 | Ratio-locked transport: metronome and click track driven by the beat grid | SPEC-0004 | Done |
 
-### M2 — Easy Mode voice-to-riff
+### M2 — Easy Mode voice-to-riff  ·  *complete*
 
 The signature loop: hum → distorted guitar riff, end to end.
 
@@ -47,27 +47,25 @@ The signature loop: hum → distorted guitar riff, end to end.
 | R-0008 | Hum-to-riff pipeline: record → track → quantize → render → loopable stem | SPEC-0008 | Done |
 | R-0009 | Beat builder: Euclidean drum templates with k/n sliders, synthesized kit | SPEC-0009 | Done |
 
-### M2 — Easy Mode voice-to-riff  ·  *complete*
-
-### M3 — Sessions
+### M3 — Sessions  ·  *complete*
 
 A song is a real, savable, exportable thing.
 
 | Req | Capability | Spec | Status |
 |-----|------------|------|--------|
-| R-0010 | Session format: song = stems + takes + arrangement + settings, save/load | SPEC-0010 | In review |
-| R-0011 | Arrangement: sections as bar spans, loop regions, stem mute/level | SPEC-0011 | In review |
-| R-0012 | Mixdown & export: WAV master + per-stem export | SPEC-0012 | In review |
-| R-0013 | Studio shell v0: Tauri app wrapping M1–M3 (record button, sliders, timeline) | SPEC-0013 | In progress (v0 slice + session I/O) |
+| R-0010 | Session format: song = stems + takes + arrangement + settings, save/load | SPEC-0010 | Done |
+| R-0011 | Arrangement: sections as bar spans, loop regions, stem mute/level | SPEC-0011 | Done |
+| R-0012 | Mixdown & export: WAV master + per-stem export | SPEC-0012 | Done |
+| R-0013 | Studio shell v0: Tauri app wrapping M1–M3 (record button, sliders, timeline) | SPEC-0013 | Done |
 
-### M4 — Influence models
+### M4 — Influence models  ·  *underway*
 
 The per-song creative brain, trained locally.
 
 | Req | Capability | Spec | Status |
 |-----|------------|------|--------|
-| R-0014 | Model registry: per-song/per-album model dirs inside the session | SPEC-0014 | In review |
-| R-0015 | Ingest & feature extraction: tempo/ratio profiles, timbre embeddings, structure from reference tracks | SPEC-0015 | In review |
+| R-0014 | Model registry: per-song/per-album model dirs inside the session | SPEC-0014 | Done |
+| R-0015 | Ingest & feature extraction: tempo/ratio profiles, timbre embeddings, structure from reference tracks | SPEC-0015 | Done |
 | R-0016 | On-device training of adapters (DDSP timbre decoder first) with progress UI | SPEC-0016 | Backlog |
 | R-0017 | Timbre transfer: render a hummed take through a trained timbre model | SPEC-0017 | Backlog |
 | R-0018 | Model-biased beat builder: influence model conditions template & sound choices | SPEC-0018 | Backlog |
@@ -121,7 +119,15 @@ genre grooves), R-0017 (timbre transfer, for voice), R-0013 (shell, for the UI).
 
 ## Current focus
 
-**M2 is complete and merged to `main`.** The hum→riff loop (R-0005–R-0008) and the
-beat builder (R-0009) are both live: `cargo run -p gooz-studio` for hum→guitar,
-`cargo run -p gooz-studio --bin beat` for the drum loop. **M3 begins next** —
-session format (R-0010), arrangement, export, and the Tauri studio shell (R-0013).
+**M1, M2, and M3 are complete and merged to `main`.** The Easy Mode loop is end to
+end: hum → riff (R-0005–R-0008), beat builder (R-0009), and a Tauri studio shell
+(R-0013) that records, shows what it heard, plays the loop, drives the smooth↔tense
+and sparse↔busy sliders, and **saves the session + exports a WAV** (R-0010–R-0012).
+
+**M4 (influence models) is underway.** The per-song model registry (R-0014) and
+reference-audio feature extraction (R-0015) are done and merged — `gooz-model` can
+create per-song model dirs inside a session and reduce a reference track to a
+ratio-native `FeatureProfile`. Both are pure/deterministic; **candle enters next**
+with on-device training (R-0016 — DDSP timbre decoder), then timbre transfer
+(R-0017) and the model-biased beat builder (R-0018). M7 (describe → music) builds
+on this same `gooz-model` seam.
