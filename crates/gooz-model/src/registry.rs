@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::ModelError;
 use crate::features::FeatureProfile;
+use crate::timbre::{TimbreDecoder, TrainConfig};
 
 /// The manifest file format version stamped into every model.
 pub const MODEL_FORMAT_VERSION: u32 = 1;
@@ -16,6 +17,9 @@ const MANIFEST: &str = "manifest.json";
 
 /// The feature-profile file name written inside a model directory (R-0015).
 const FEATURES: &str = "features.json";
+
+/// The trained timbre-decoder weights file inside a model directory (R-0016).
+const TIMBRE: &str = "timbre.safetensors";
 
 /// The family of influence model a directory holds.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -173,6 +177,27 @@ impl ModelRegistry {
         }
         let json = std::fs::read_to_string(&path).map_err(|e| ModelError::Io(e.to_string()))?;
         serde_json::from_str(&json).map_err(|e| ModelError::Deserialize(e.to_string()))
+    }
+
+    /// Saves a trained timbre decoder into a model's directory as
+    /// `timbre.safetensors` and records it in the manifest (R-0016).
+    pub fn save_timbre(&self, id: &str, decoder: &TimbreDecoder) -> Result<(), ModelError> {
+        let dir = self.dir(id);
+        if !dir.join(MANIFEST).exists() {
+            return Err(ModelError::NotFound(id.to_string()));
+        }
+        decoder.save(&dir.join(TIMBRE))?;
+        self.manifest_add_file(id, TIMBRE)
+    }
+
+    /// Loads a model's trained timbre decoder, shaped for `cfg`, or
+    /// [`ModelError::NotFound`] if it has none.
+    pub fn load_timbre(&self, id: &str, cfg: &TrainConfig) -> Result<TimbreDecoder, ModelError> {
+        let path = self.dir(id).join(TIMBRE);
+        if !path.exists() {
+            return Err(ModelError::NotFound(id.to_string()));
+        }
+        TimbreDecoder::load(&path, cfg)
     }
 
     /// Removes a model directory, or [`ModelError::NotFound`].

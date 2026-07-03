@@ -24,6 +24,8 @@ pub enum ModelError {
     InvalidName(String),
     /// Feature extraction from reference audio failed (propagated analysis error).
     Extract(String),
+    /// On-device training or a tensor op failed (propagated candle error).
+    Train(String),
 }
 
 impl fmt::Display for ModelError {
@@ -36,6 +38,7 @@ impl fmt::Display for ModelError {
             ModelError::AlreadyExists(id) => write!(f, "a model '{id}' already exists"),
             ModelError::InvalidName(n) => write!(f, "'{n}' is not a usable model name"),
             ModelError::Extract(m) => write!(f, "feature extraction failed: {m}"),
+            ModelError::Train(m) => write!(f, "timbre training failed: {m}"),
         }
     }
 }

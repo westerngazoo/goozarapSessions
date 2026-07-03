@@ -28,7 +28,9 @@
 mod error;
 mod features;
 mod registry;
+mod timbre;
 
 pub use error::ModelError;
 pub use features::{FEATURE_FORMAT_VERSION, FeatureProfile, RatioWeight, extract_features};
 pub use registry::{MODEL_FORMAT_VERSION, ModelHandle, ModelKind, ModelManifest, ModelRegistry};
+pub use timbre::{TimbreDecoder, TrainConfig, TrainProgress, extract_timbre_target, train_timbre};
