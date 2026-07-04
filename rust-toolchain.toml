@@ -1,0 +1,6 @@
+# Pin the toolchain so local, CI, and every contributor build identically.
+# Matches project-specifics.md ("Rust stable, currently 1.95"). Bumping this is
+# a deliberate, owner-reviewed change (a newer stable may add clippy lints).
+[toolchain]
+channel = "1.95.0"
+components = ["rustfmt", "clippy"]
