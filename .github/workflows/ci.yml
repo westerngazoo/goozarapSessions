@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # The four toolchain merge gates (CLAUDE.md §5) over the whole workspace.
+  # `apps/gooz-studio/src-tauri` is excluded from the workspace, so this job
+  # never pulls the webview runtime and runs on plain Linux.
+  workspace:
+    name: workspace gates (fmt · clippy · test)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust (stable + rustfmt, clippy)
+        run: |
+          rustup update stable
+          rustup default stable
+          rustup component add rustfmt clippy
+      - name: format
+        run: cargo fmt --all --check
+      - name: clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: test
+        run: cargo test --workspace
+
+  # Guards the excluded Tauri desktop shell, which the workspace gate cannot see.
+  # macOS uses the system WKWebView, so no extra system deps are needed.
+  desktop-shell:
+    name: desktop shell (excluded Tauri crate)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust (stable)
+        run: |
+          rustup update stable
+          rustup default stable
+      - name: check src-tauri
+        run: cargo check --manifest-path apps/gooz-studio/src-tauri/Cargo.toml

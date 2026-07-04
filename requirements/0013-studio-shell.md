@@ -51,9 +51,13 @@ live-mic path means the shell is testable in CI and previewable without hardware
 
 ## 4. Constraints & non-goals
 
-- Wraps **only R-0008**. **No** session persistence (R-0010), arrangement
-  (R-0011), export (R-0012), beat-builder wiring (R-0009), functional ratio
-  sliders (a visual stub is fine in v0), or Advanced Mode.
+- **Extended v0 scope** (see decision log, 2026-07-02). Originally wrapped only
+  R-0008; as its dependencies landed on `main` the slice was extended — with
+  owner sign-off — to wrap R-0009 (beat builder + functional **sparse↔busy**
+  slider), the functional **smooth↔tense** slider, and R-0010/R-0011/R-0012
+  (save session + WAV export). **Still out of scope:** arrangement-editing UI,
+  influence-model biasing (R-0018), the "describe → music" prompt (M7), and
+  Advanced Mode (M6).
 - Frontend is vanilla HTML/CSS/JS (no framework/build step); backend commands are
   thin wrappers over the existing crates — no new DSP/synth logic here.
 - `apps/gooz-studio` becomes the Tauri app; its R-0008 pipeline **lib** stays as
