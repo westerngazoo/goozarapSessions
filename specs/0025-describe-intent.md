@@ -31,11 +31,11 @@ crates/gooz-model/src/
 
 ```toml
 [features]
-# The candle instruct-model path. Heavy (pulls candle-transformers, tokenizers,
-# hf-hub) and needs model weights, so it is OFF by default: the four toolchain
+# The candle instruct-model path. Heavy (pulls the transformer stack and a
+# tokenizer) and needs model weights, so it is OFF by default: the four toolchain
 # gates build only the deterministic parser and never download a model. Compile
 # the LM path with `--features llm` (by-hand, per R-0025 AC3).
-llm = ["dep:candle-transformers", "dep:tokenizers", "dep:hf-hub"]
+llm = ["dep:candle-transformers", "dep:tokenizers"]
 ```
 
 The deterministic `DefaultParser` is **always** compiled. This is the same
@@ -112,7 +112,8 @@ tempoBpm, meter, tension, density, drive, genre, mood from this description:
 then `.normalized()`. On **any** failure (load / decode / no-JSON / invalid) it
 delegates to `DefaultParser` — so the LM path is never worse than deterministic
 (**AC3, AC6**). Weights load from the session model dir (R-0014) or the `hf-hub`
-cache; **no network at inference once cached; nothing leaves the device**.
+cache; **no network at all — weights are read from disk; nothing leaves the
+device**.
 
 ### Model choice (resolves the requirement's open question — architect to confirm)
 
@@ -182,6 +183,8 @@ pub fn parse_intent(prompt: &str) -> MusicalIntent { DefaultParser.parse(prompt)
 | 2026-07-04 | Cues and genre tags match **whole words**, not substrings | Architect finding: `str::contains` fired "hats" inside "whats" and "crush" inside a plugin name, moving sliders on un-actionable text (AC4 forbids exactly that). Token matching also removes the singular/plural double-counting. |
 | 2026-07-04 | A tempo candidate must be **plausible** (40–250 BPM) to win | Architect finding: `"un 808, bpm 135"` yielded 808 (clamped to 250). "808" is this domain's most common number. |
 | 2026-07-04 | A compound genre tag and its base are **both** reported ("black metal" ⇒ also "metal") | Architect finding: dropping the base contradicted AC4 and would break coarse consumers — R-0026's preset lookup keys on "metal". Subsumption is the consumer's call, not the parser's. |
+| 2026-08-18 | The LM path's **text handling** (instruction building, JSON extraction) is compiled and gate-tested **unconditionally**; only model loading and decoding sit behind `llm` | Text wrangling is where the bugs hide — brace balance inside strings, escapes, truncated replies — so it must be covered by the gates even though inference is by-hand. A refinement of §2's module layout. |
+| 2026-08-18 | Weights are read **from disk paths only**; `hf-hub` dropped from the feature | The implementation never downloads, so shipping a hub client (and its TLS/HTTP stack) would be a dead dependency and an unearned network surface. Fetching weights, if ever wanted, belongs to the model registry (R-0014). |
 
 ## Changelog
 

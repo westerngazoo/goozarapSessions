@@ -28,6 +28,7 @@
 mod error;
 mod features;
 mod intent;
+mod llm;
 mod parse;
 mod preset;
 mod registry;
@@ -39,6 +40,8 @@ pub use intent::{
     DEFAULT_BPM, DEFAULT_DENSITY, DEFAULT_DRIVE, DEFAULT_TENSION, Meter, MusicalIntent,
     SectionIntent,
 };
+#[cfg(feature = "llm")]
+pub use llm::LmParser;
 pub use parse::{DefaultParser, Parser, parse_intent};
 pub use preset::{SoundPlan, VoicePlan, VoiceRole, odd_limit_for, plan_sound};
 pub use registry::{MODEL_FORMAT_VERSION, ModelHandle, ModelKind, ModelManifest, ModelRegistry};

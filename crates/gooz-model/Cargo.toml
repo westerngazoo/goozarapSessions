@@ -13,3 +13,13 @@ gooz-dsp.workspace = true
 gooz-ratio.workspace = true
 candle-core = "0.11"
 candle-nn = "0.11"
+candle-transformers = { version = "0.11", optional = true }
+tokenizers = { version = "0.23.1", optional = true }
+
+[features]
+# The candle instruct-model parser (R-0025 AC3). Heavy — it pulls the
+# transformer stack, a tokenizer, and the hub client, and it needs model weights
+# on disk — so it is OFF by default: the four toolchain gates build only the
+# deterministic parser and never download a model. Build it with
+# `cargo build -p gooz-model --features llm` (by-hand, not a CI gate).
+llm = ["dep:candle-transformers", "dep:tokenizers"]
