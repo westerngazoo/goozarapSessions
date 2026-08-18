@@ -1,6 +1,6 @@
 # SPEC-0025 — Describe → MusicalIntent
 
-- **Status:** Proposed — architect review pending
+- **Status:** Accepted (architect review: REQUEST CHANGES → findings applied)
 - **Realizes:** R-0025
 - **Author:** Claude (owner: Gustavo Delgadillo)
 - **Created:** 2026-07-04
@@ -178,6 +178,10 @@ pub fn parse_intent(prompt: &str) -> MusicalIntent { DefaultParser.parse(prompt)
 | 2026-07-04 | `LmParser` falls back to `DefaultParser` on **any** failure | The LM is never worse than deterministic; guarantees AC6 with no user-facing errors. |
 | 2026-07-04 | `MusicalIntent` ends every parse via `.normalized()` | One choke point guarantees a valid, clamped, meter-checked intent regardless of source. |
 | 2026-07-04 | Propose Qwen2.5-0.5B-Instruct GGUF (SmolLM2-360M alt) | Small, on-device, strong JSON-following, candle-transformers support. Architect confirms. |
+| 2026-07-04 | Land the **deterministic parser first**; the `llm` candle path follows in its own PR | AC2 makes the deterministic parser mandatory and independently valuable, and the `Parser` trait is the seam the LM plugs into with no API change — so this is the TDD-shaped order, not an under-delivery. R-0025 is **not** closed until AC3 lands. |
+| 2026-07-04 | Cues and genre tags match **whole words**, not substrings | Architect finding: `str::contains` fired "hats" inside "whats" and "crush" inside a plugin name, moving sliders on un-actionable text (AC4 forbids exactly that). Token matching also removes the singular/plural double-counting. |
+| 2026-07-04 | A tempo candidate must be **plausible** (40–250 BPM) to win | Architect finding: `"un 808, bpm 135"` yielded 808 (clamped to 250). "808" is this domain's most common number. |
+| 2026-07-04 | A compound genre tag and its base are **both** reported ("black metal" ⇒ also "metal") | Architect finding: dropping the base contradicted AC4 and would break coarse consumers — R-0026's preset lookup keys on "metal". Subsumption is the consumer's call, not the parser's. |
 
 ## Changelog
 
