@@ -93,7 +93,7 @@ pub struct DefaultParser;
 
 | Field | Rule |
 |-------|------|
-| `tempo_bpm` | first number adjacent to `bpm`/`tempo` (`"135 BPM"`); else default |
+| `tempo_bpm` | first **plausible** (40–250) number adjacent to `bpm`/`tempo` (`"135 BPM"`). An implausible neighbour is skipped, not clamped — `"un 808, bpm 135"` yields 135, and `"9000 bpm"` leaves the default |
 | `meter` | first `N/M` with `M ∈ {2,4,8,16}` (`"6/8"`); else 4/4 |
 | `tension` | high-cues {`tenso`,`tensión`,`menor`,`minor`,`segundas menores`,`dark`,`oscuro`,`disonante`,`black metal`} raise it; low-cues {`suave`,`smooth`,`mayor`,`major`,`warm`,`consonante`} lower it |
 | `density` | high {`saturado`,`busy`,`rápido`,`tresillos`,`rolls`,`denso`}; low {`sparse`,`lento`,`minimal`} |

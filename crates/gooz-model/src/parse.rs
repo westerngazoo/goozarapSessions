@@ -201,6 +201,9 @@ fn contains_cue(words: &[&str], cue: &str) -> bool {
 /// Plausibility matters in this domain: "un 808, bpm 135" must yield 135, not
 /// the 808 sitting on the marker's other side.
 fn scan_tempo(text: &str) -> Option<f64> {
+    // This cannot reuse `tokenize`: a tempo may be decimal, so `.` must stay
+    // inside tokens here (and be trimmed when comparing the marker), whereas
+    // whole-word cue matching wants it treated as a separator.
     // Keep only real tokens: splitting on punctuation leaves empty strings that
     // would otherwise sit between a number and its marker ("a 135 BPM.").
     let words: Vec<&str> = text
@@ -249,10 +252,34 @@ fn scan_meter(text: &str) -> Option<Meter> {
 }
 
 /// Moves a slider by how many high/low cues the description uses as words.
+///
+/// One musical statement counts once: when a matching cue is contained in
+/// another matching cue ("hats" inside "hi-hats"), only the longer one scores,
+/// so a single phrase cannot move a slider twice.
 fn cue_slider(words: &[&str], high: &[&str], low: &[&str], neutral: f32) -> f32 {
-    let hits = |cues: &[&str]| cues.iter().filter(|cue| contains_cue(words, cue)).count() as f32;
-    let delta = (hits(high) - hits(low)) * CUE_STEP;
+    let delta = (distinct_hits(words, high) - distinct_hits(words, low)) * CUE_STEP;
     (neutral + delta).clamp(0.0, 1.0)
+}
+
+/// Counts matching cues, discarding any that a longer matching cue subsumes.
+fn distinct_hits(words: &[&str], cues: &[&str]) -> f32 {
+    let mut matched: Vec<&str> = cues
+        .iter()
+        .copied()
+        .filter(|cue| contains_cue(words, cue))
+        .collect();
+    matched.sort_by_key(|cue| std::cmp::Reverse(cue.len()));
+    let mut counted: Vec<&str> = Vec::new();
+    for cue in matched {
+        if counted
+            .iter()
+            .any(|kept| contains_cue(&tokenize(kept), cue))
+        {
+            continue;
+        }
+        counted.push(cue);
+    }
+    counted.len() as f32
 }
 
 /// Collects the vocabulary terms the description mentions, in vocabulary order.
@@ -274,7 +301,10 @@ mod tests {
     use super::*;
     use crate::intent::{DEFAULT_DENSITY, DEFAULT_DRIVE, DEFAULT_TENSION};
 
-    /// The owner's north-star prompt (AC4), trimmed to its musical content.
+    /// The owner's north-star prompt (AC4), reduced to its musical sentences.
+    /// Kept verbatim where it matters: the tempo arrives as "135 BPM", which is
+    /// the marker form the deterministic scanner needs (a bare "a 135" is left
+    /// to the language-model parser, AC3).
     const NORTH_STAR: &str = "Pon el tempo a 135 BPM. La batería trap + tumbado en un compás de \
          6/8, snare seco en el tercer tiempo, y satura los hi-hats para que hagan tresillos \
          rápidos. El bajo: un 808 largo con distorsión hasta que cruje. La guitarra: black metal \
@@ -341,6 +371,20 @@ mod tests {
     }
 
     #[test]
+    fn a_phrase_does_not_score_twice_through_its_own_words() {
+        // "hi-hats" contains "hats"; "black metal" contains "metal". One
+        // statement must move a slider once, not twice.
+        assert_eq!(
+            parse_intent("satura los hi-hats").density,
+            parse_intent("satura los hats").density
+        );
+        assert_eq!(
+            parse_intent("black metal").tension,
+            parse_intent("metal").tension
+        );
+    }
+
+    #[test]
     fn a_repeated_cue_is_not_double_counted() {
         // Singular and plural are separate vocabulary words, so one musical
         // statement moves the slider once either way.
@@ -363,8 +407,16 @@ mod tests {
     fn tempo_is_read_on_either_side_of_the_marker() {
         assert_eq!(parse_intent("135 bpm").tempo_bpm, 135.0);
         assert_eq!(parse_intent("tempo 140").tempo_bpm, 140.0);
-        // Out-of-range requests are clamped by normalize, never rejected.
-        assert!(parse_intent("9000 bpm").tempo_bpm <= 250.0);
+        // An implausible tempo is ignored (the plausibility gate drops it before
+        // `normalized` ever sees it), leaving the neutral default.
+        assert_eq!(
+            parse_intent("9000 bpm").tempo_bpm,
+            crate::intent::DEFAULT_BPM
+        );
+        assert_eq!(
+            parse_intent("tempo 39").tempo_bpm,
+            crate::intent::DEFAULT_BPM
+        );
     }
 
     #[test]

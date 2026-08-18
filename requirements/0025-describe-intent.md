@@ -87,6 +87,18 @@ and honest while giving free-text understanding of rich prompts.
   SPEC-0025** — it must be small enough to run on a laptop and loadable by
   `candle`/`candle-transformers`.
 
+### Reference prompt (the north-star test case)
+
+The owner's prompt this requirement is measured against, reduced to its musical
+sentences (the full original also named DAW plugins and artists, which the
+parser must ignore):
+
+> Pon el tempo a 135 BPM. La batería trap + tumbado en un compás de 6/8, snare
+> seco en el tercer tiempo, y satura los hi-hats para que hagan tresillos
+> rápidos. El bajo: un 808 largo con distorsión hasta que cruje. La guitarra:
+> black metal + requinto, notas consecutivas muy juntas (segundas menores para
+> dar tensión), con reverb de 4 segundos.
+
 ## 5. Open questions
 
 - **Which model?** (SPEC-0025.) Candidate: a ≤1–3B quantized instruct model that
