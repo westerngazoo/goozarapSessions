@@ -18,9 +18,9 @@ use crate::{
 };
 
 /// How many points the waveform is downsampled to for drawing.
-const WAVE_BUCKETS: usize = 600;
+pub(crate) const WAVE_BUCKETS: usize = 600;
 /// Easy Mode's grid root (Hz).
-const GRID_ROOT_HZ: f64 = 220.0;
+pub(crate) const GRID_ROOT_HZ: f64 = 220.0;
 /// The smooth↔tense slider walks the harmonic-series odd-limit between these
 /// bounds: smooth = just the fifth (simple ratios), tense = up to the 15th
 /// harmonic (denser, more complex ratios).
@@ -189,7 +189,7 @@ pub fn demo_beat() -> BeatView {
 }
 
 impl BeatView {
-    fn from_stem(stem: &BeatStem, voices: &[BeatVoiceSpec]) -> BeatView {
+    pub(crate) fn from_stem(stem: &BeatStem, voices: &[BeatVoiceSpec]) -> BeatView {
         let seconds = if stem.sample_rate == 0 {
             0.0
         } else {
@@ -207,7 +207,7 @@ impl BeatView {
 }
 
 impl VoiceView {
-    fn from_spec(spec: &BeatVoiceSpec) -> VoiceView {
+    pub(crate) fn from_spec(spec: &BeatVoiceSpec) -> VoiceView {
         VoiceView {
             name: drum_name(spec.kind).to_string(),
             onsets: spec.onsets,
@@ -285,7 +285,7 @@ fn demo_hum(sample_rate: u32) -> Vec<f32> {
 
 /// Peak-envelope downsample: the max absolute sample in each of `buckets`
 /// contiguous chunks. Empty in → empty out.
-fn peak_envelope(samples: &[f32], buckets: usize) -> Vec<f32> {
+pub(crate) fn peak_envelope(samples: &[f32], buckets: usize) -> Vec<f32> {
     if samples.is_empty() || buckets == 0 {
         return Vec::new();
     }

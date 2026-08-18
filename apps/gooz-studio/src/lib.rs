@@ -16,10 +16,12 @@
 //! (R-0013 v0); the shell crate under `src-tauri/` wraps these in commands.
 
 mod beat;
+mod describe;
 mod pipeline;
 mod view;
 
 pub use beat::{BeatConfig, BeatStem, BeatVoiceSpec, build_beat};
+pub use describe::{DescribedSong, describe_song, melody_notes, song_from_plan};
 pub use gooz_synth::{DrumKind, Pattern};
 pub use pipeline::{PipelineConfig, RiffOutcome, RiffStem, hum_to_riff};
 pub use view::{
