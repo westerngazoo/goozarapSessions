@@ -11,13 +11,16 @@ use serde::{Deserialize, Serialize};
 
 /// Easy Mode's neutral tempo, in BPM.
 pub const DEFAULT_BPM: f64 = 92.0;
-/// Neutral slider positions (smooth↔tense, sparse↔busy, clean↔driven).
+/// Neutral harmonic tension (smooth↔tense).
 pub const DEFAULT_TENSION: f32 = 0.30;
+/// Neutral rhythmic density (sparse↔busy).
 pub const DEFAULT_DENSITY: f32 = 0.55;
+/// Neutral distortion amount (clean↔driven).
 pub const DEFAULT_DRIVE: f32 = 0.40;
-/// Tempo bounds a description may request, in BPM.
-const MIN_BPM: f64 = 40.0;
-const MAX_BPM: f64 = 250.0;
+/// Slowest tempo a description may request, in BPM.
+pub(crate) const MIN_BPM: f64 = 40.0;
+/// Fastest tempo a description may request, in BPM.
+pub(crate) const MAX_BPM: f64 = 250.0;
 /// Beat units a meter may use (the "/4" in 6/8, 3/4, 7/8 …).
 const VALID_UNITS: [u32; 5] = [1, 2, 4, 8, 16];
 

@@ -7,7 +7,7 @@
 //! `llm`) plugs into the same trait and falls back here on any failure, so the
 //! app degrades gracefully instead of erroring.
 
-use crate::intent::{Meter, MusicalIntent};
+use crate::intent::{MAX_BPM, MIN_BPM, Meter, MusicalIntent};
 
 /// Turns a natural-language description into a [`MusicalIntent`].
 ///
@@ -22,7 +22,8 @@ pub trait Parser {
 const CUE_STEP: f32 = 0.25;
 
 /// Cue words that push each slider up or down. Matched case-insensitively as
-/// substrings, so Spanish and English descriptions both land.
+/// **whole words** (a phrase matches a whole-word run), so Spanish and English
+/// descriptions both land while fragments inside longer words never fire.
 const TENSION_HIGH: &[&str] = &[
     "tenso",
     "tensión",
@@ -136,6 +137,7 @@ pub struct DefaultParser;
 impl Parser for DefaultParser {
     fn parse(&self, prompt: &str) -> MusicalIntent {
         let text = prompt.to_lowercase();
+        let words = tokenize(&text);
         let mut intent = MusicalIntent::default();
 
         if let Some(bpm) = scan_tempo(&text) {
@@ -144,11 +146,11 @@ impl Parser for DefaultParser {
         if let Some(meter) = scan_meter(&text) {
             intent.meter = meter;
         }
-        intent.tension = cue_slider(&text, TENSION_HIGH, TENSION_LOW, intent.tension);
-        intent.density = cue_slider(&text, DENSITY_HIGH, DENSITY_LOW, intent.density);
-        intent.drive = cue_slider(&text, DRIVE_HIGH, DRIVE_LOW, intent.drive);
-        intent.genre = tags_present(&text, GENRE_VOCAB);
-        intent.mood = tags_present(&text, MOOD_VOCAB);
+        intent.tension = cue_slider(&words, TENSION_HIGH, TENSION_LOW, intent.tension);
+        intent.density = cue_slider(&words, DENSITY_HIGH, DENSITY_LOW, intent.density);
+        intent.drive = cue_slider(&words, DRIVE_HIGH, DRIVE_LOW, intent.drive);
+        intent.genre = tags_present(&words, GENRE_VOCAB);
+        intent.mood = tags_present(&words, MOOD_VOCAB);
 
         intent.normalized()
     }
@@ -172,7 +174,32 @@ pub fn parse_intent(prompt: &str) -> MusicalIntent {
     DefaultParser.parse(prompt)
 }
 
-/// Finds a tempo: the first number adjacent to "bpm" or "tempo" (either order).
+/// Splits lowercased text into whole words, so a cue only matches a real word —
+/// never a fragment of a longer one ("hats" must not fire inside "whats", and a
+/// plugin called "camelcrusher" is not the word "crush").
+fn tokenize(text: &str) -> Vec<&str> {
+    text.split(|c: char| !c.is_alphanumeric())
+        .filter(|token| !token.is_empty())
+        .collect()
+}
+
+/// True when `cue` — one word or a phrase — appears as a whole-word run in
+/// `words`.
+fn contains_cue(words: &[&str], cue: &str) -> bool {
+    let needle = tokenize(cue);
+    match needle.len() {
+        0 => false,
+        1 => words.contains(&needle[0]),
+        _ => words
+            .windows(needle.len())
+            .any(|run| run == needle.as_slice()),
+    }
+}
+
+/// Finds a tempo: the first *plausible* number adjacent to "bpm" or "tempo".
+///
+/// Plausibility matters in this domain: "un 808, bpm 135" must yield 135, not
+/// the 808 sitting on the marker's other side.
 fn scan_tempo(text: &str) -> Option<f64> {
     // Keep only real tokens: splitting on punctuation leaves empty strings that
     // would otherwise sit between a number and its marker ("a 135 BPM.").
@@ -191,7 +218,11 @@ fn scan_tempo(text: &str) -> Option<f64> {
         let after = words.get(i + 1);
         for candidate in [before, after].into_iter().flatten() {
             if let Ok(bpm) = candidate.trim_matches('.').parse::<f64>() {
-                return Some(bpm);
+                // Skip an implausible neighbour (an "808" is a bass, not a
+                // tempo) and keep looking on the other side / at later markers.
+                if (MIN_BPM..=MAX_BPM).contains(&bpm) {
+                    return Some(bpm);
+                }
             }
         }
     }
@@ -217,27 +248,25 @@ fn scan_meter(text: &str) -> Option<Meter> {
     None
 }
 
-/// Moves a slider by how many high/low cues the description contains.
-fn cue_slider(text: &str, high: &[&str], low: &[&str], neutral: f32) -> f32 {
-    let hits = |cues: &[&str]| cues.iter().filter(|cue| text.contains(**cue)).count() as f32;
+/// Moves a slider by how many high/low cues the description uses as words.
+fn cue_slider(words: &[&str], high: &[&str], low: &[&str], neutral: f32) -> f32 {
+    let hits = |cues: &[&str]| cues.iter().filter(|cue| contains_cue(words, cue)).count() as f32;
     let delta = (hits(high) - hits(low)) * CUE_STEP;
     (neutral + delta).clamp(0.0, 1.0)
 }
 
-/// Collects the vocabulary terms the description mentions, longest first so a
-/// compound tag ("black metal") wins over its parts ("metal").
-fn tags_present(text: &str, vocab: &[&str]) -> Vec<String> {
-    let mut terms: Vec<&str> = vocab.iter().copied().filter(|t| text.contains(t)).collect();
-    terms.sort_by_key(|t| std::cmp::Reverse(t.len()));
-    let mut out: Vec<String> = Vec::new();
-    for term in terms {
-        // Skip a term already covered by a longer tag we kept ("metal" ⊂ "black metal").
-        if out.iter().any(|kept| kept.contains(term)) {
-            continue;
-        }
-        out.push(term.to_string());
-    }
-    out
+/// Collects the vocabulary terms the description mentions, in vocabulary order.
+///
+/// A compound tag and its base are both reported ("black metal" also yields
+/// "metal"): the specific term describes the style, the base term is what
+/// coarse consumers — the preset library (R-0026) — look up. Deciding that one
+/// subsumes the other is the consumer's job, not the parser's.
+fn tags_present(words: &[&str], vocab: &[&str]) -> Vec<String> {
+    vocab
+        .iter()
+        .filter(|term| contains_cue(words, term))
+        .map(|term| (*term).to_string())
+        .collect()
 }
 
 #[cfg(test)]
@@ -270,9 +299,10 @@ mod tests {
             "saturated hats + triplets read busy"
         );
         assert!(intent.drive > DEFAULT_DRIVE, "distortion reads driven");
-        // The prompt names "trap + tumbado" and "black metal" — those are the
-        // genres to report (it never says "corrido", so we must not invent it).
-        for tag in ["trap", "tumbado", "black metal"] {
+        // The prompt names "trap + tumbado" and "black metal". The compound tag
+        // and its base are both reported, so a coarse consumer keying on
+        // "metal" still matches (R-0026 presets).
+        for tag in ["trap", "tumbado", "black metal", "metal"] {
             assert!(
                 intent.genre.contains(&tag.to_string()),
                 "genre should include {tag}"
@@ -280,20 +310,41 @@ mod tests {
         }
         assert!(
             !intent.genre.contains(&"corrido".to_string()),
-            "never invent a genre"
+            "never invent a genre the prompt did not name"
         );
-        // A compound tag wins over its part.
-        assert!(!intent.genre.contains(&"metal".to_string()));
     }
 
     #[test]
     fn ac4_unactionable_content_is_ignored_without_error() {
-        let intent = parse_intent(
-            "Abre tu DAW y carga CamelCrusher o Blood Overdrive; escucha a Sematary y Natanael Cano.",
-        );
-        // Plugin and artist names are not genres and must not crash or invent params.
-        assert!(intent.genre.is_empty() || !intent.genre.contains(&"sematary".to_string()));
-        assert_eq!(intent.tempo_bpm, crate::intent::DEFAULT_BPM);
+        // A DAW instruction plus artist names: nothing musical to extract, so
+        // the whole intent must stay neutral.
+        let intent =
+            parse_intent("Abre tu DAW y busca a Sematary y a Natanael Cano en Spotify o YouTube.");
+        assert_eq!(intent, MusicalIntent::default());
+    }
+
+    #[test]
+    fn cues_only_fire_on_whole_words() {
+        // "whats" contains "hats", "simplemente" contains "simple", and a
+        // plugin named "camelcrusher" contains "crush" — none may move a slider.
+        for text in ["whats the vibe", "simplemente hazlo", "carga camelcrusher"] {
+            assert_eq!(parse_intent(text), MusicalIntent::default(), "text: {text}");
+        }
+    }
+
+    #[test]
+    fn an_808_next_to_a_marker_is_not_a_tempo() {
+        // "808" is a bass in this domain, not a plausible BPM: the real tempo
+        // on the marker's other side must win.
+        assert_eq!(parse_intent("un 808, bpm 135").tempo_bpm, 135.0);
+        assert_eq!(parse_intent("bajo 808 con tempo 140").tempo_bpm, 140.0);
+    }
+
+    #[test]
+    fn a_repeated_cue_is_not_double_counted() {
+        // Singular and plural are separate vocabulary words, so one musical
+        // statement moves the slider once either way.
+        assert_eq!(parse_intent("roll").density, parse_intent("rolls").density);
     }
 
     #[test]
