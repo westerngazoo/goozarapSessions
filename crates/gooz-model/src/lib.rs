@@ -27,10 +27,17 @@
 
 mod error;
 mod features;
+mod intent;
+mod parse;
 mod registry;
 mod timbre;
 
 pub use error::ModelError;
 pub use features::{FEATURE_FORMAT_VERSION, FeatureProfile, RatioWeight, extract_features};
+pub use intent::{
+    DEFAULT_BPM, DEFAULT_DENSITY, DEFAULT_DRIVE, DEFAULT_TENSION, Meter, MusicalIntent,
+    SectionIntent,
+};
+pub use parse::{DefaultParser, Parser, parse_intent};
 pub use registry::{MODEL_FORMAT_VERSION, ModelHandle, ModelKind, ModelManifest, ModelRegistry};
 pub use timbre::{TimbreDecoder, TrainConfig, TrainProgress, extract_timbre_target, train_timbre};

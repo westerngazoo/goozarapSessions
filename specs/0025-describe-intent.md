@@ -62,7 +62,14 @@ pub struct MusicalIntent {
 pub struct Meter { pub beats: u32, pub unit: u32 } // 6/8 = {6, 8}; default {4, 4}
 ```
 
-- `Default` gives the neutral intent (empty prompt ⇒ this) — **AC1**.
+- **Manual `impl Default`** (not `#[derive(Default)]`) for both `MusicalIntent`
+  (the neutral values above — a derived `Default` would give `tempo_bpm = 0.0`,
+  empty vecs) **and** `Meter` (`{4, 4}` — a derived `Default` would give the
+  invalid `{0, 0}`). This is the correctness crux: container `#[serde(default)]`
+  fills any missing JSON field from `MusicalIntent::default()`, so a partial LM
+  JSON (e.g. `{"tempoBpm": 135}`) stays neutral where it is silent (**AC1**;
+  robust LM parse). A malformed/partial `meter` object is caught by `normalized()`
+  (below), never panics.
 - `MusicalIntent::normalized(self) -> MusicalIntent`: clamps sliders to `[0,1]`,
   lowercases + dedups tags, and validates the meter (`beats > 0`, `unit ∈
   {1,2,4,8,16}`; else 4/4). **Always returns a valid intent** — the parser ends
