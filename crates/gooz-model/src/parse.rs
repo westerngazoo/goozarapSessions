@@ -429,7 +429,7 @@ mod tests {
     #[test]
     fn opposing_cues_cancel_toward_neutral() {
         let clean = parse_intent("limpio y suave");
-        let dirty = parse_intent("distorsión abrasiva");
+        let dirty = parse_intent("distorsión abrasivo");
         assert!(clean.drive < dirty.drive);
     }
 

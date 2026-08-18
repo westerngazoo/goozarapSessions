@@ -63,7 +63,9 @@ and honest while giving free-text understanding of rich prompts.
 - **AC4 — Extracts the actionable params from a rich prompt.** The owner's
   reference prompt yields (via either parser) approximately: `tempo≈135`,
   `meter=6/8`, `tension` high (minor-second cue), `density` high (saturated-hats
-  cue), `drive` high (distortion cue), `genre ⊇ {trap, corrido, metal}`.
+  cue), `drive` high (distortion cue), `genre ⊇ {trap, tumbado, black metal, metal}` — the styles the prompt
+  actually names (it says *tumbado*, never *corrido*), with each compound tag
+  reported alongside its base so coarse consumers match.
   Un-actionable content (specific plugins, artist names, DAW steps) is ignored
   without error.
 - **AC5 — Inspectable & editable.** The returned intent is fully readable and every
