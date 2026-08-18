@@ -211,7 +211,13 @@ const PRESETS: &[Preset] = &[
 /// ```
 pub fn plan_sound(intent: &MusicalIntent) -> SoundPlan {
     let preset = select_preset(&intent.genre);
-    let steps = (intent.meter.beats * preset.steps_per_beat).max(1);
+    // Saturating: `normalized` already bounds the beat count, but the plan
+    // layer must not be the thing that panics if that ever regresses.
+    let steps = intent
+        .meter
+        .beats
+        .saturating_mul(preset.steps_per_beat)
+        .max(1);
     let plan_lane = |lane: &Lane, role: VoiceRole| VoicePlan {
         role,
         onsets: onsets_for(lane, intent.density, steps),
@@ -332,6 +338,16 @@ mod tests {
             );
             previous = total;
         }
+        // Monotonicity alone would still hold if `density` were ignored, so pin
+        // the actual effect: a busy description must out-play a sparse one.
+        for genre in [&[][..], &["trap"], &["corrido"], &["metal"]] {
+            let sparse = plan_sound(&intent_with(0.0, 0.3, genre)).total_onsets();
+            let busy = plan_sound(&intent_with(1.0, 0.3, genre)).total_onsets();
+            assert!(
+                busy > sparse,
+                "density does not modulate {genre:?}: {sparse} → {busy}"
+            );
+        }
     }
 
     #[test]
@@ -420,8 +436,8 @@ mod tests {
             .find(|v| v.role == VoiceRole::Kick)
             .expect("a kick lane");
         assert!(hat.onsets > kick.onsets, "hats are the busy lane");
-        assert!(plan.odd_limit > TENSE_MIN_ODD, "minor seconds read tense");
-        assert!(plan.drive > 0.5, "distortion reads driven");
+        assert!(plan.odd_limit >= 11, "minor seconds read strongly tense");
+        assert!(plan.drive >= 0.7, "distortion reads strongly driven");
     }
 
     #[test]

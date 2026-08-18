@@ -166,7 +166,9 @@ pub fn parse_intent(prompt: &str) -> MusicalIntent { DefaultParser.parse(prompt)
   (fixtures → slots; empty → default; determinism).
 - AC3 candle LM parser → `llm.rs` behind `llm` feature; seam-fixture / by-hand.
 - AC4 rich-prompt extraction → a test feeding the owner's north-star prompt asserts
-  `≈135` bpm, `6/8`, high tension/density/drive, `genre ⊇ {trap, corrido, metal}`.
+  `≈135` bpm, `6/8`, high tension/density/drive, `genre ⊇ {trap, tumbado, black metal, metal}` — the styles the prompt
+  actually names (it says *tumbado*, never *corrido*), with each compound tag
+  reported alongside its base so coarse consumers match.
 - AC5 inspectable/editable → public fields + `normalized`; tolerant serde.
 - AC6 local/graceful → fallback-on-any-failure; `normalized` can't emit garbage.
 - AC7 tests/docs/gates → deterministic path + validation in the gate; LM by-hand.

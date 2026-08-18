@@ -17,6 +17,9 @@ pub const DEFAULT_TENSION: f32 = 0.30;
 pub const DEFAULT_DENSITY: f32 = 0.55;
 /// Neutral distortion amount (clean↔driven).
 pub const DEFAULT_DRIVE: f32 = 0.40;
+/// The most beats a bar may hold. Anything larger is not a musical request, and
+/// would overflow the step-count arithmetic the plan layer does (R-0026).
+pub(crate) const MAX_BEATS_PER_BAR: u32 = 32;
 /// Slowest tempo a description may request, in BPM.
 pub(crate) const MIN_BPM: f64 = 40.0;
 /// Fastest tempo a description may request, in BPM.
@@ -44,10 +47,17 @@ impl Default for Meter {
 }
 
 impl Meter {
-    /// True when the meter is playable: a positive beat count over a power-of-two
-    /// beat unit the grid understands.
+    /// True when the meter is playable: a beat count the grid can lay out, over
+    /// a power-of-two beat unit it understands.
+    ///
+    /// The upper bound on `beats` is not cosmetic. Downstream, a bar's step
+    /// count is `beats · steps_per_beat` (R-0026), so an unbounded beat count
+    /// overflows that multiply — reachable both from an ordinary prompt
+    /// ("compás de 4000000000/4") and from a language model emitting
+    /// `{"beats": 4000000000}`. Repairing it here keeps `normalized` the single
+    /// choke point that guarantees a usable intent.
     pub fn is_valid(&self) -> bool {
-        self.beats > 0 && VALID_UNITS.contains(&self.unit)
+        (1..=MAX_BEATS_PER_BAR).contains(&self.beats) && VALID_UNITS.contains(&self.unit)
     }
 }
 
