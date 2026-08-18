@@ -29,6 +29,7 @@ mod error;
 mod features;
 mod intent;
 mod parse;
+mod preset;
 mod registry;
 mod timbre;
 
@@ -39,5 +40,6 @@ pub use intent::{
     SectionIntent,
 };
 pub use parse::{DefaultParser, Parser, parse_intent};
+pub use preset::{SoundPlan, VoicePlan, VoiceRole, odd_limit_for, plan_sound};
 pub use registry::{MODEL_FORMAT_VERSION, ModelHandle, ModelKind, ModelManifest, ModelRegistry};
 pub use timbre::{TimbreDecoder, TrainConfig, TrainProgress, extract_timbre_target, train_timbre};
