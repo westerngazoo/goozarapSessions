@@ -19,6 +19,7 @@ path = "src/bin/beat.rs"
 gooz-dsp.workspace = true
 gooz-audio.workspace = true
 gooz-synth.workspace = true
+gooz-model.workspace = true
 gooz-ratio.workspace = true
 gooz-session.workspace = true
 serde.workspace = true
