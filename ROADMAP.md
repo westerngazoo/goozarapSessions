@@ -100,9 +100,9 @@ M4); it never generates raw audio and never leaves the device. Design in
 
 | Req | Capability | Spec | Status |
 |-----|------------|------|--------|
-| R-0025 | Describe → `MusicalIntent`: natural-language description parsed into structured musical intent (tempo, feel, genre, structure, energy, timbre, mood) | SPEC-0025 | Backlog |
-| R-0026 | Genre & style preset library (trap + general): intent → concrete ratio/beat/synth parameters, ratio-native and data-driven | SPEC-0026 | Backlog |
-| R-0027 | Description-conditioned generation: melody + beat from the intent via the engine (R-0001/2/7/9), biased by the influence model | SPEC-0027 | Backlog |
+| R-0025 | Describe → `MusicalIntent`: natural-language description parsed into structured musical intent (tempo, feel, genre, structure, energy, timbre, mood) | SPEC-0025 | Done |
+| R-0026 | Genre & style preset library (trap + general): intent → concrete ratio/beat/synth parameters, ratio-native and data-driven | SPEC-0026 | Done |
+| R-0027 | Description-conditioned generation: melody + beat from the intent via the engine (R-0001/2/7/9), biased by the influence model | SPEC-0027 | Done |
 | R-0028 | Voice transformation ("voz distortion"): recorded voice → character/timbre via DSP (formant/pitch, waveshaping) + DDSP timbre transfer (R-0017) | SPEC-0028 | Backlog |
 | R-0029 | "Describe" prompt UI in the studio shell: text/voice prompt → generated stems on the timeline | SPEC-0029 | Backlog |
 
@@ -124,10 +124,21 @@ end: hum → riff (R-0005–R-0008), beat builder (R-0009), and a Tauri studio s
 (R-0013) that records, shows what it heard, plays the loop, drives the smooth↔tense
 and sparse↔busy sliders, and **saves the session + exports a WAV** (R-0010–R-0012).
 
-**M4 (influence models) is underway.** The per-song model registry (R-0014) and
-reference-audio feature extraction (R-0015) are done and merged — `gooz-model` can
-create per-song model dirs inside a session and reduce a reference track to a
-ratio-native `FeatureProfile`. Both are pure/deterministic; **candle enters next**
-with on-device training (R-0016 — DDSP timbre decoder), then timbre transfer
-(R-0017) and the model-biased beat builder (R-0018). M7 (describe → music) builds
-on this same `gooz-model` seam.
+**M4 (influence models) is underway** — the per-song model registry (R-0014),
+reference-audio feature extraction (R-0015), and on-device DDSP timbre training
+(R-0016, the first candle integration) are merged. Timbre transfer (R-0017) and the
+model-biased beat builder (R-0018) remain.
+
+**M7's core is real: a text description now becomes audio.** `R-0025` parses a
+prompt into an inspectable `MusicalIntent` (a deterministic whole-word scanner,
+plus an optional local candle LM behind the `llm` feature that falls back to it on
+any failure); `R-0026` turns that intent into a `SoundPlan` via a data-driven genre
+preset table (corrido/tumbado, trap, metal, neutral free); `R-0027` renders the
+plan — a Euclidean beat plus a melody that walks the harmonic grid by ratio
+complexity — into a playable, exportable WAV. The owner's reference prompt plans as
+135 BPM, 6/8, snare on beat 3, saturated hats, using 7:4 and 13:8 for tension.
+
+Next in M7: the engine capabilities the prompts already ask for but the engine
+cannot yet honour — an 808 bass (R-0033), a reverb/EQ chain (R-0034), and a true
+non-4/4 beat clock (R-0035) — then the describe-prompt UI (R-0029) and
+per-instrument prompts (R-0032). M5 (rap copilot) and M6 (Advanced Mode) follow.
