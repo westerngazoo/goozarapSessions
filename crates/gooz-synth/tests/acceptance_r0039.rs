@@ -5,6 +5,7 @@
 //! actually sound a fifth higher at degree `3:2`, these fail.
 
 use gooz_dsp::{Config, pitch_track};
+use gooz_ratio::PitchGrid;
 use gooz_synth::{Distortion, QuantizedNote, Ratio, RenderConfig, Sampler, render_sampled_notes};
 
 const SR: u32 = 48_000;
@@ -33,6 +34,11 @@ fn noise_burst() -> Vec<f32> {
         .collect()
 }
 
+/// A sampler over a known-finite recording.
+fn sampler(recording: Vec<f32>) -> Sampler {
+    Sampler::new(recording).expect("the test recordings are finite")
+}
+
 fn note(degree: Ratio, octave: i32, onset_secs: f64) -> QuantizedNote {
     QuantizedNote {
         degree,
@@ -51,7 +57,7 @@ fn note(degree: Ratio, octave: i32, onset_secs: f64) -> QuantizedNote {
 /// the distortion curve.
 fn clean() -> RenderConfig {
     RenderConfig {
-        distortion: Distortion::None,
+        distortion: Distortion::Bypass,
         ..RenderConfig::default()
     }
 }
@@ -79,9 +85,9 @@ fn render_one(sampler: &Sampler, degree: Ratio, octave: i32) -> Vec<f32> {
 
 #[test]
 fn ac1_the_grid_plays_the_recording_at_the_asked_for_ratio() {
-    let sampler = Sampler::new(recording(220.0));
+    let sampler = sampler(recording(220.0));
     let root = measured_hz(&render_one(&sampler, Ratio::UNISON, 0));
-    for (num, den) in [(3, 2), (5, 4), (2, 1)] {
+    for (num, den) in [(3, 2), (5, 4), (15, 8)] {
         let ratio = Ratio::new(num, den).expect("ratio");
         let measured = measured_hz(&render_one(&sampler, ratio, 0));
         let expected = root * num as f64 / den as f64;
@@ -97,7 +103,7 @@ fn ac2_at_unison_the_recording_is_placed_unshifted() {
     // Not "close to" the source — the source times one gain factor. A resampled
     // approximation would drift sample by sample; a placement cannot.
     let source = recording(220.0);
-    let rendered = render_one(&Sampler::new(source.clone()), Ratio::UNISON, 0);
+    let rendered = render_one(&sampler(source.clone()), Ratio::UNISON, 0);
     assert_eq!(
         rendered.len(),
         source.len(),
@@ -121,7 +127,7 @@ fn ac2_at_unison_the_recording_is_placed_unshifted() {
 fn ac3_a_pitchless_recording_is_still_an_instrument() {
     // A knock has no fundamental to detect. It must still play across the whole
     // grid — nothing in this path may require a pitch.
-    let sampler = Sampler::new(noise_burst());
+    let sampler = sampler(noise_burst());
     let degrees = [(1, 1), (9, 8), (5, 4), (4, 3), (3, 2), (5, 3), (15, 8)];
     let notes: Vec<QuantizedNote> = degrees
         .iter()
@@ -129,13 +135,24 @@ fn ac3_a_pitchless_recording_is_still_an_instrument() {
         .map(|(i, &(n, d))| note(Ratio::new(n, d).expect("ratio"), 0, i as f64 * 0.25))
         .collect();
     let out = render_sampled_notes(&sampler, &notes, SR, &clean());
-    assert!(!out.is_empty(), "a knock must produce audio");
     assert!(out.iter().all(|s| s.is_finite() && s.abs() <= 1.0 + 1e-6));
+    // Every degree must actually sound. `!out.is_empty()` would pass with six
+    // of the seven notes silently dropped — and silent dropping is exactly this
+    // renderer's failure mode.
+    let window = SR as usize / 20;
+    for (i, (num, den)) in degrees.iter().enumerate() {
+        let onset = (i as f64 * 0.25 * f64::from(SR)) as usize;
+        let energy: f32 = out[onset..onset + window].iter().map(|s| s * s).sum();
+        assert!(
+            energy > 1e-6,
+            "degree {num}:{den} never sounded — {energy:e} energy at its onset"
+        );
+    }
 }
 
 #[test]
 fn ac4_octaves_are_ratio_arithmetic() {
-    let sampler = Sampler::new(recording(220.0));
+    let sampler = sampler(recording(220.0));
     let root = measured_hz(&render_one(&sampler, Ratio::UNISON, 0));
     let up = measured_hz(&render_one(&sampler, Ratio::UNISON, 1));
     let down = measured_hz(&render_one(&sampler, Ratio::UNISON, -1));
@@ -150,20 +167,28 @@ fn ac4_octaves_are_ratio_arithmetic() {
 fn ac4_an_octave_too_extreme_to_form_is_skipped_not_a_panic() {
     // 64 octaves overflows the ratio long before it overflows the ear. The note
     // drops out; the rest of the song still renders.
-    let sampler = Sampler::new(recording(220.0));
-    let notes = vec![note(Ratio::UNISON, 64, 0.0), note(Ratio::UNISON, 0, 0.0)];
+    let source = recording(220.0);
+    let sampler = sampler(source.clone());
+    // The bad note sits a second later than the good one: if it rendered
+    // instead of being skipped, the mix would be twice as long. Both at onset
+    // zero would prove nothing — `normalize_peak` erases a doubled mix.
+    let notes = vec![note(Ratio::UNISON, 64, 1.0), note(Ratio::UNISON, 0, 0.0)];
     let out = render_sampled_notes(&sampler, &notes, SR, &clean());
-    assert!(!out.is_empty(), "the renderable note must still sound");
+    assert_eq!(
+        out.len(),
+        source.len(),
+        "the overflowing note was not skipped"
+    );
     assert!(out.iter().all(|s| s.is_finite()));
 }
 
 #[test]
 fn ac5_nothing_to_play_is_silence_not_an_error() {
-    let sampler = Sampler::new(recording(220.0));
+    let loaded = sampler(recording(220.0));
     let one = [note(Ratio::UNISON, 0, 0.0)];
-    assert!(render_sampled_notes(&Sampler::new(Vec::new()), &one, SR, &clean()).is_empty());
-    assert!(render_sampled_notes(&sampler, &[], SR, &clean()).is_empty());
-    assert!(render_sampled_notes(&sampler, &one, 0, &clean()).is_empty());
+    assert!(render_sampled_notes(&sampler(Vec::new()), &one, SR, &clean()).is_empty());
+    assert!(render_sampled_notes(&loaded, &[], SR, &clean()).is_empty());
+    assert!(render_sampled_notes(&loaded, &one, 0, &clean()).is_empty());
 }
 
 #[test]
@@ -171,7 +196,7 @@ fn ac5_a_full_scale_recording_stays_inside_the_unit_interval() {
     let square: Vec<f32> = (0..SR as usize)
         .map(|i| if (i / 100) % 2 == 0 { 1.0 } else { -1.0 })
         .collect();
-    let sampler = Sampler::new(square);
+    let sampler = sampler(square);
     let notes: Vec<QuantizedNote> = (0..8)
         .map(|i| note(Ratio::new(3, 2).expect("ratio"), 0, i as f64 * 0.1))
         .collect();
@@ -183,7 +208,7 @@ fn ac5_a_full_scale_recording_stays_inside_the_unit_interval() {
 
 #[test]
 fn ac6_the_same_recording_and_notes_render_identically() {
-    let sampler = Sampler::new(recording(220.0));
+    let sampler = sampler(recording(220.0));
     let notes = [note(Ratio::new(5, 4).expect("ratio"), 0, 0.0)];
     let first = render_sampled_notes(&sampler, &notes, SR, &clean());
     let second = render_sampled_notes(&sampler, &notes, SR, &clean());
@@ -195,7 +220,7 @@ fn the_notes_frequency_is_ignored_the_recording_is_the_root() {
     // Pins R-0039's central decision. Two notes at the same degree whose
     // `freq_hz` disagree wildly must render the same audio — the sampler tunes
     // to the recording, never to an absolute frequency.
-    let sampler = Sampler::new(recording(220.0));
+    let sampler = sampler(recording(220.0));
     let fifth = Ratio::new(3, 2).expect("ratio");
     let mut quiet_lie = note(fifth, 0, 0.0);
     quiet_lie.freq_hz = 40.0;
@@ -212,7 +237,7 @@ fn a_note_lands_where_its_onset_says() {
     // Without this, a renderer that stacked every note at time zero would pass
     // every other test in this file.
     let source = recording(220.0);
-    let sampler = Sampler::new(source.clone());
+    let sampler = sampler(source.clone());
     let half = SR as usize / 2;
     let late = render_sampled_notes(&sampler, &[note(Ratio::UNISON, 0, 0.5)], SR, &clean());
     assert_eq!(
@@ -230,12 +255,55 @@ fn a_note_lands_where_its_onset_says() {
 fn an_onset_past_the_end_of_any_song_is_skipped_not_a_panic() {
     // `onset_secs` is caller data. `1e18 · sample_rate` saturates a `usize`
     // cast, and resizing to that aborts the process.
-    let sampler = Sampler::new(recording(220.0));
+    let sampler = sampler(recording(220.0));
     let notes = vec![note(Ratio::UNISON, 0, 1e18), note(Ratio::UNISON, 0, 0.0)];
     let out = render_sampled_notes(&sampler, &notes, SR, &clean());
     assert_eq!(
         out.len(),
         recording(220.0).len(),
         "only the real note should sound"
+    );
+}
+
+#[test]
+fn the_instrument_says_where_it_lives_not_the_songs_pitch_grid() {
+    // A `QuantizedNote`'s octave counts octaves above the *pitch grid's* root,
+    // and that root is a per-song setting the user can change. Without
+    // `root_octave` the sampler would silently mean "the grid's root pitch is
+    // the recording's pitch", and re-rooting a song would transpose every
+    // sampled part. Both halves are pinned: the hazard, and the fix.
+    let source = recording(220.0);
+    let (mut naive, mut rooted) = (Vec::new(), Vec::new());
+    for root_hz in [440.0, 55.0] {
+        let grid = PitchGrid::harmonic(root_hz, 9).expect("grid");
+        let snapped = grid.snap(440.0).expect("440 Hz snaps");
+        let mut played = note(snapped.degree, snapped.octave, 0.0);
+        played.freq_hz = snapped.hz;
+        naive.push(render_sampled_notes(&sampler(source.clone()), &[played], SR, &clean()).len());
+        let instrument = sampler(source.clone()).rooted_at_octave(snapped.octave);
+        rooted.push(render_sampled_notes(&instrument, &[played], SR, &clean()));
+    }
+    assert_ne!(
+        naive[0], naive[1],
+        "the hazard is gone — this test no longer proves anything"
+    );
+    assert_eq!(
+        rooted[0], rooted[1],
+        "the song's pitch grid transposed the instrument"
+    );
+}
+
+#[test]
+fn a_recording_with_a_nan_is_refused_when_it_is_still_fixable() {
+    // One NaN makes every shift of the recording fail, which would silence the
+    // whole part with no indication of why. It is rejected at the point where
+    // the user could simply record again.
+    let mut broken = recording(220.0);
+    broken[12_345] = f32::NAN;
+    assert!(Sampler::new(broken).is_err());
+    assert!(Sampler::new(vec![0.1, f32::INFINITY]).is_err());
+    assert!(
+        Sampler::new(Vec::new()).is_ok(),
+        "an empty instrument is silence, not an error"
     );
 }
