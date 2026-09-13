@@ -33,6 +33,7 @@ mod onset;
 mod quantize;
 mod shift;
 mod transcribe;
+mod validate;
 mod yin;
 
 pub use error::DspError;

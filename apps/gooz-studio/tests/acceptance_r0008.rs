@@ -59,7 +59,7 @@
 //!   pitch_grid: &gooz_dsp::PitchGrid, tempo: &gooz_dsp::Tempo,
 //!   cfg: &PipelineConfig) -> Result<RiffOutcome, gooz_dsp::DspError>` —
 //!   SPEC-0008 §2/§3. The only fallible stage is `analyze`, whose error is
-//!   `?`-propagated; the same four `DspError` variants therefore surface from
+//!   `?`-propagated; the same analysis `DspError` variants therefore surface from
 //!   the pipeline (AC4).
 //! * `bar_samples = round(tempo.bar_seconds() · sample_rate)` (SPEC-0008 §2
 //!   step 4). With `Tempo::new(120.0, 4.0)` (`bar_seconds() == 2.0`) and

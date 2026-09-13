@@ -118,3 +118,103 @@ fn length_scales_by_the_inverse_of_the_ratio() {
     assert!((up.len() as f64 - source.len() as f64 / 2.0).abs() <= 1.0);
     assert!((down.len() as f64 - source.len() as f64 * 2.0).abs() <= 1.0);
 }
+
+#[test]
+fn ac4_an_extreme_ratio_is_a_typed_error_not_a_capacity_panic() {
+    // `Ratio` guarantees positive and non-zero, but not *bounded*: a tiny step
+    // asks for an output the machine cannot hold. That must be a typed error.
+    let absurd = Ratio::new(1, u64::MAX).expect("ratio");
+    assert!(matches!(
+        shift_pitch(&[0.5], SR, absurd),
+        Err(DspError::OutputTooLong)
+    ));
+    // Short of overflow, an implausibly long output is refused just as clearly:
+    // one second shifted down by 1:10_000 would be nearly three hours of audio.
+    let source = sine(220.0);
+    assert!(matches!(
+        shift_pitch(&source, SR, Ratio::new(1, 10_000).expect("ratio")),
+        Err(DspError::OutputTooLong)
+    ));
+}
+
+#[test]
+fn golden_ramp_reads_every_other_sample_when_shifted_an_octave_up() {
+    // Five samples at double speed: positions 0, 2, 4 — and the length rounds
+    // *up*, so the final sample is not dropped.
+    let ramp: Vec<f32> = (0..5).map(|i| i as f32).collect();
+    let up = shift_pitch(&ramp, SR, Ratio::new(2, 1).expect("ratio")).expect("shift");
+    assert_eq!(up, vec![0.0, 2.0, 4.0]);
+}
+
+#[test]
+fn golden_ramp_interpolates_between_samples_on_a_fractional_step() {
+    // Step 1.5 lands between samples on every odd read. Nearest-neighbour would
+    // give [0, 1, 3, 4]; linear interpolation is the decision the spec defends.
+    let ramp: Vec<f32> = (0..6).map(|i| i as f32).collect();
+    let shifted = shift_pitch(&ramp, SR, Ratio::new(3, 2).expect("ratio")).expect("shift");
+    assert_eq!(shifted, vec![0.0, 1.5, 3.0, 4.5]);
+}
+
+#[test]
+fn output_length_is_exact_integer_arithmetic_not_float_rounding() {
+    // 5 · 49 = 245 exactly, but `(5.0 / (1.0 / 49.0)).ceil()` is 246: the float
+    // round-trip overshoots and duplicates the final sample.
+    let ramp: Vec<f32> = (0..5).map(|i| i as f32).collect();
+    let stretched = shift_pitch(&ramp, SR, Ratio::new(1, 49).expect("ratio")).expect("shift");
+    assert_eq!(stretched.len(), 245);
+}
+
+#[test]
+fn the_shift_changes_pitch_without_changing_level() {
+    // A gain bug anywhere in the read path would sail past the bounds check in
+    // `ac5`, because a 0.8-amplitude source has room to grow before it clips.
+    let source = sine(220.0);
+    let rms = |s: &[f32]| {
+        (s.iter().map(|x| f64::from(*x) * f64::from(*x)).sum::<f64>() / s.len() as f64).sqrt()
+    };
+    for (num, den) in [(3, 2), (2, 3), (2, 1)] {
+        let shifted =
+            shift_pitch(&source, SR, Ratio::new(num, den).expect("ratio")).expect("shift");
+        let ratio_of_levels = rms(&shifted) / rms(&source);
+        assert!(
+            (ratio_of_levels - 1.0).abs() < 0.05,
+            "{num}:{den} changed the level by {:.1}%",
+            (ratio_of_levels - 1.0) * 100.0
+        );
+    }
+}
+
+/// The energy at one frequency, via Goertzel — cheaper than a full FFT and
+/// enough to ask "did the tone land where we asked for it?".
+fn magnitude_at(signal: &[f32], hz: f64) -> f64 {
+    let omega = std::f64::consts::TAU * hz / f64::from(SR);
+    let coeff = 2.0 * omega.cos();
+    let (mut previous, mut before_that) = (0.0f64, 0.0f64);
+    for &sample in signal {
+        let current = f64::from(sample) + coeff * previous - before_that;
+        before_that = previous;
+        previous = current;
+    }
+    let power = previous * previous + before_that * before_that - coeff * previous * before_that;
+    2.0 * power.max(0.0).sqrt() / signal.len() as f64
+}
+
+#[test]
+fn upward_shifts_fold_content_above_nyquist_a_documented_limitation() {
+    // Reading faster than the source is decimation, and there is no pre-filter,
+    // so a tone whose target sits above Nyquist comes back folded. Classic
+    // sampler behaviour, and fine for the one-shots R-0039 wants — but it must
+    // be pinned, not assumed away. Adding a decimation filter will change this.
+    let source = sine(15_000.0);
+    let octave_up = shift_pitch(&source, SR, Ratio::new(2, 1).expect("ratio")).expect("shift");
+    // Asked for 30 kHz at a 24 kHz Nyquist; 48 − 30 = 18 kHz is where it lands.
+    let folded = magnitude_at(&octave_up, 18_000.0);
+    assert!(
+        folded > 0.5,
+        "the alias should carry the signal's energy, measured {folded:.3}"
+    );
+    assert!(
+        folded > magnitude_at(&octave_up, 15_000.0) * 10.0,
+        "the folded tone should dominate what remains at the source frequency"
+    );
+}

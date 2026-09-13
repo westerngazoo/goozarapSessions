@@ -109,6 +109,24 @@ M4); it never generates raw audio and never leaves the device. Design in
 **Depends on:** M4 (influence models / `gooz-model`), R-0009 (beat builder, for
 genre grooves), R-0017 (timbre transfer, for voice), R-0013 (shell, for the UI).
 
+### M8 — The instrument (record anything, play it anywhere)  ·  *proposed*
+
+> **Milestone label needs the owner's confirmation.** These four came out of the
+> owner's session request — *"quiero poder tararear o meter notas por separado,
+> considerar diferentes escalas, y que grabe cualquier sonido y pueda moverlo,
+> casi casi generar un instrumento"* — and do not belong to M2 (complete) or to
+> M7 (describe → music). Grouped here so the roadmap says what is next.
+
+| Req | Capability | Spec | Status |
+|-----|------------|------|--------|
+| R-0036 | Note input: hum **or** place notes one at a time on the ratio grid | SPEC-0036 | Backlog |
+| R-0037 | Scale library: named ratio sets surfaced feel-first ("brillante · mayor") | SPEC-0037 | Discussing |
+| R-0038 | Ratio-native pitch shift (varispeed) — the sampler's missing primitive | SPEC-0038 | In review |
+| R-0039 | Sampler: any recorded sound becomes an instrument across the grid | SPEC-0039 | Backlog |
+
+**Depends on:** R-0001 (`Ratio`, `PitchGrid::from_ratios`), R-0003 (capture),
+R-0005/R-0006 (track + quantize). R-0039 depends on R-0038.
+
 ## Sequencing rules
 
 - A requirement enters `Discussing` only when every requirement it depends on is
@@ -141,4 +159,10 @@ complexity — into a playable, exportable WAV. The owner's reference prompt pla
 Next in M7: the engine capabilities the prompts already ask for but the engine
 cannot yet honour — an 808 bass (R-0033), a reverb/EQ chain (R-0034), and a true
 non-4/4 beat clock (R-0035) — then the describe-prompt UI (R-0029) and
-per-instrument prompts (R-0032). M5 (rap copilot) and M6 (Advanced Mode) follow.
+per-instrument prompts (R-0032).
+
+**M8 (the instrument) is the owner's current priority**, in the order they chose
+("cadena del instrumento"): pitch shift (R-0038, in review) unblocks the sampler
+(R-0039). The scale library (R-0037) became specifiable once the owner superseded
+the founding "no scales, no note names" rule — a scale here is a *named ratio
+set*, surfaced feel-first. M5 (rap copilot) and M6 (Advanced Mode) follow.

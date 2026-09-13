@@ -1,7 +1,7 @@
 # R-0038 — Pitch shift (ratio-native)
 
 - **Status:** Accepted
-- **Milestone:** M2
+- **Milestone:** M8 (proposed — see ROADMAP; was labelled M2, which is complete)
 - **Owner:** Gustavo Delgadillo (see project-specifics.md)
 - **Created:** 2026-09-10
 - **Depends on:** R-0001 (`Ratio`), R-0005 (YIN — how the result is verified)
@@ -37,8 +37,9 @@ recording*.
   floating-point noise).
 - **AC3 — Both directions.** Shifting up (`3:2`) and down (`2:3`) both work, and
   shifting by a ratio then by its inverse recovers the original pitch.
-- **AC4 — Typed errors, no panics.** Empty input, a zero sample rate, or
-  non-finite samples are reported as a typed `DspError`; nothing panics.
+- **AC4 — Typed errors, no panics.** Empty input, a zero sample rate,
+  non-finite samples, **and a ratio so extreme the output could not be held**
+  are reported as a typed `DspError`; nothing panics, for any `Ratio`.
 - **AC5 — Deterministic and clean.** The same input and ratio always produce
   identical samples; output is finite and bounded in `[-1, 1]`.
 - **AC6 — Tests, docs, gates.** Golden-signal tests (a known sine, measured back
@@ -62,8 +63,10 @@ None — settled in the decision log.
 |------|----------|-----------|
 | 2026-09-10 | The shift is expressed as a **`Ratio`**, never semitones or cents | The whole engine speaks ratios; a semitone API would be the one place a user has to know theory. |
 | 2026-09-10 | v0 is **varispeed (resampling)**: pitch and length change together, like a classic sampler or tape | It is exactly right for the use that motivated this (R-0039, one-shot samples across a grid), it is artifact-free and deterministic, and it is honestly verifiable. A phase vocoder that holds length constant is real work and buys nothing for a one-shot; it becomes its own requirement the day a whole riff must be transposed without changing tempo. |
-| 2026-09-10 | The API is a **seam**, so a length-preserving implementation can arrive later without touching callers | Same stance as the parser seam in R-0025: pick the honest simple thing now, leave the upgrade path open. |
+| 2026-09-10 | The API is a **seam** for a future length-preserving implementation | Same stance as the parser seam in R-0025: pick the honest simple thing now, leave the upgrade path open. **Amended 2026-09-13:** a time-preserving implementation must arrive as an explicit mode or a separate function, *not* by changing what `shift_pitch` returns — R-0039 depends on the length changing, so a silent swap would break it. |
+| 2026-09-13 | AC4 extended to cover an unbounded `Ratio` | An extreme ratio aborted the process with a capacity overflow. "Nothing panics" was always the intent; the criterion now names the case that proved it was not met. |
 
 ## Changelog
 
 - 2026-09-10 — created, accepted for M2.
+- 2026-09-13 — AC4 extended after architect review; seam decision amended.

@@ -806,6 +806,7 @@ version = "0.1.0"
 dependencies = [
  "gooz-audio",
  "gooz-dsp",
+ "gooz-model",
  "gooz-ratio",
  "gooz-session",
  "gooz-synth",
