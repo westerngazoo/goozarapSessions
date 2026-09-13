@@ -15,6 +15,12 @@
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Distortion {
+    /// Bypass — the signal passes through untouched, `drive` ignored.
+    ///
+    /// The renderers always end in a distortion stage, so a caller that
+    /// wants their recording back as they played it needs a curve that is
+    /// the identity. R-0039's sampler is the first caller that does.
+    None,
     /// Smooth `tanh` saturation — warm overdrive.
     SoftClip,
     /// Boost then clamp to `[-1, 1]` — aggressive fuzz.
@@ -27,6 +33,7 @@ impl Distortion {
     pub fn apply(self, x: f32, drive: f32) -> f32 {
         let d = drive.max(1e-3);
         match self {
+            Distortion::None => x,
             Distortion::SoftClip => (d * x).tanh() / d.tanh(),
             Distortion::HardClip => (d * x).clamp(-1.0, 1.0),
         }

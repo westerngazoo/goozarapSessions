@@ -122,7 +122,7 @@ genre grooves), R-0017 (timbre transfer, for voice), R-0013 (shell, for the UI).
 | R-0036 | Note input: hum **or** place notes one at a time on the ratio grid | SPEC-0036 | Backlog |
 | R-0037 | Scale library: named ratio sets surfaced feel-first ("brillante · mayor") | SPEC-0037 | Discussing |
 | R-0038 | Ratio-native pitch shift (varispeed) — the sampler's missing primitive | SPEC-0038 | Done |
-| R-0039 | Sampler: any recorded sound becomes an instrument across the grid | SPEC-0039 | Backlog |
+| R-0039 | Sampler: any recorded sound becomes an instrument across the grid | SPEC-0039 | In review |
 
 **Depends on:** R-0001 (`Ratio`, `PitchGrid::from_ratios`), R-0003 (capture),
 R-0005/R-0006 (track + quantize). R-0039 depends on R-0038.
