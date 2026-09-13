@@ -70,3 +70,4 @@ None — settled in the decision log.
 
 - 2026-09-10 — created, accepted for M2.
 - 2026-09-13 — AC4 extended after architect review; seam decision amended.
+- 2026-09-13 — QA run: FAIL on AC5 (finite input → NaN), fixed; re-verified.

@@ -34,6 +34,15 @@ use gooz_ratio::Ratio;
 /// dimensionless, but "too long" is a duration, and a duration needs a rate.
 const MAX_OUTPUT_SECS: u64 = 600;
 
+/// The highest sample rate this project treats as real gear (192 kHz studio).
+///
+/// [`MAX_OUTPUT_SECS`] on its own is a *duration*, and the caller picks the
+/// rate — so an absurd rate widens it without limit: ten minutes at
+/// `u32::MAX` Hz is about ten terabytes, which the allocator will happily
+/// reserve lazily and then thrash the machine filling. Clamping the rate makes
+/// the duration cap an absolute ceiling on the allocation too.
+const MAX_SANE_SAMPLE_RATE: u64 = 192_000;
+
 /// Shifts `signal` up or down by `ratio`.
 ///
 /// The returned buffer sounds at `ratio` times the input's pitch. Its length
@@ -96,14 +105,16 @@ pub fn shift_pitch(signal: &[f32], sample_rate: u32, ratio: Ratio) -> Result<Vec
 ///
 /// # Errors
 ///
-/// [`DspError::OutputTooLong`] if the count overflows or exceeds
-/// [`MAX_OUTPUT_SECS`] at this sample rate.
+/// [`DspError::OutputTooLong`] if the count exceeds [`MAX_OUTPUT_SECS`] at
+/// this sample rate, capped by [`MAX_SANE_SAMPLE_RATE`].
 fn output_len(input_len: usize, sample_rate: u32, ratio: Ratio) -> Result<usize, DspError> {
-    let stretched = (input_len as u64)
-        .checked_mul(ratio.den())
-        .ok_or(DspError::OutputTooLong)?;
-    let out_len = stretched.div_ceil(ratio.num());
-    if out_len > MAX_OUTPUT_SECS * u64::from(sample_rate) {
+    // u128 so the intermediate cannot overflow into a false rejection: for a
+    // ratio like `u64::MAX : u64::MAX - 1` — very nearly unison — `len · den`
+    // leaves u64 long before the division cancels it back down.
+    let stretched = input_len as u128 * u128::from(ratio.den());
+    let out_len = stretched.div_ceil(u128::from(ratio.num()));
+    let limit = MAX_OUTPUT_SECS * u64::from(sample_rate).min(MAX_SANE_SAMPLE_RATE);
+    if out_len > u128::from(limit) {
         return Err(DspError::OutputTooLong);
     }
     Ok(out_len as usize)
@@ -112,10 +123,16 @@ fn output_len(input_len: usize, sample_rate: u32, ratio: Ratio) -> Result<usize,
 /// Reads the signal at a fractional index, interpolating linearly between the
 /// two neighbouring samples and holding the value at the far edge.
 ///
-/// Linear interpolation is exact at integer positions and its error is a gentle
-/// high-frequency roll-off rather than the aliasing artifacts that would be
-/// audible on a percussive sample. Because `|lerp(a, b)| <= max(|a|, |b|)`, a
-/// bounded input cannot produce an unbounded output.
+/// Linear interpolation is exact at integer positions, and its error is a
+/// gentle high-frequency roll-off rather than an audible artifact.
+///
+/// The weighted form `left·(1−f) + right·f` is deliberate, not stylistic. The
+/// tidier `left + (right − left)·f` overflows f32 when the two neighbours are
+/// more than `f32::MAX` apart, and `inf · 0.0` is NaN — so a *finite* input
+/// came back non-finite, even at an integer position where the read is
+/// supposed to be exact. `|lerp(a, b)| <= max(|a|, |b|)` is true in ℝ but was
+/// false in f32; each term of the weighted form is bounded by its own sample,
+/// so it holds in both.
 fn sample_at(signal: &[f32], pos: f64) -> f32 {
     let floor = pos.floor();
     let index = floor as usize;
@@ -128,5 +145,5 @@ fn sample_at(signal: &[f32], pos: f64) -> f32 {
     };
     let right = signal.get(index + 1).copied().unwrap_or(left);
     let fraction = (pos - floor) as f32;
-    left + (right - left) * fraction
+    left * (1.0 - fraction) + right * fraction
 }

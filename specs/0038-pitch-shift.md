@@ -73,7 +73,11 @@ change is deliberate rather than silent.
 
 Bounds: `|lerp(a, b)| <= max(|a|, |b|)`, so an input inside `[-1, 1]` cannot
 leave it (**AC5**) — no clamping needed, and none is applied so the caller keeps
-its headroom information.
+its headroom information. That inequality holds in ℝ for either algebraic form,
+but **only the weighted form `left·(1−f) + right·f` preserves it in f32**: the
+difference form `left + (right − left)·f` overflows when the neighbours are more
+than `f32::MAX` apart, and `inf · 0.0` is NaN, so a finite input could return a
+non-finite one.
 
 ### Validation
 
@@ -134,6 +138,9 @@ None.
 | Date | Decision | Rationale |
 |------|----------|-----------|
 | 2026-09-10 | Varispeed resampling, not a phase vocoder | Right for one-shot samples (R-0039), artifact-free on transients, deterministic, and honestly testable. Length-preserving shift is a separate requirement when a use case demands it. |
+| 2026-09-13 | Interpolation uses the **weighted** form, not the difference form | QA measured a finite input returning NaN: `[f32::MIN, f32::MAX, …]` × `3:2` → `[NaN, 1.7e38, NaN, …]`, failing even at integer positions where the read is meant to be exact. The two forms are equal in ℝ; only one is safe in f32. |
+| 2026-09-13 | The length cap clamps the sample rate at `MAX_SANE_SAMPLE_RATE` (192 kHz) | A duration cap is not a memory cap while the caller picks the rate: ten minutes at `u32::MAX` Hz is ~10 TB, which the allocator reserves lazily and then thrashes the machine filling — worse than failing fast. |
+| 2026-09-13 | Length arithmetic is **u128** | `u64` overflowed on ratios whose huge terms cancel (`u64::MAX : u64::MAX − 1` is nearly unison), refusing two samples of honest audio as "too long". |
 | 2026-09-13 | Upward shifts **alias**; documented and pinned by a test rather than filtered | A decimation pre-filter is cheap but is its own requirement; what was not acceptable was the previous text claiming the operation had no aliasing, which measurement disproved (15 kHz × `2:1` returns at 18 kHz). |
 | 2026-09-13 | Output length is **integer** arithmetic, and an implausible length is a typed error | Float `ceil` appended a duplicated sample for some ratios, and an unbounded `Ratio` could abort the process on a capacity overflow — a panic in library code, which CLAUDE.md §6 forbids. |
 | 2026-09-10 | Linear interpolation for v0 | Exact at integer positions (so `1:1` is bit-identical), deterministic, and its error is a gentle roll-off rather than audible aliasing. Higher-order interpolation is a drop-in upgrade behind the same signature. |

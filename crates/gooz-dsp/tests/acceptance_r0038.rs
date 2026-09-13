@@ -218,3 +218,268 @@ fn upward_shifts_fold_content_above_nyquist_a_documented_limitation() {
         "the folded tone should dominate what remains at the source frequency"
     );
 }
+
+#[test]
+fn below_the_fold_threshold_the_tone_lands_exactly_where_it_was_asked_for() {
+    // The other half of the documented limitation: *under* `SR / (2·ratio)`
+    // nothing folds. Without this, the aliasing test above could be read as
+    // "shifts land somewhere unpredictable"; with it, the boundary is the claim.
+    let source = sine(10_000.0);
+    let up = shift_pitch(&source, SR, Ratio::new(3, 2).expect("ratio")).expect("shift");
+    let asked_for = magnitude_at(&up, 15_000.0);
+    assert!(
+        asked_for > 0.5,
+        "15 kHz is under the 24 kHz Nyquist and must carry the energy, measured {asked_for:.3}"
+    );
+    assert!(
+        asked_for > magnitude_at(&up, 10_000.0) * 10.0,
+        "the tone must move off its source frequency"
+    );
+}
+
+#[test]
+fn ac1_a_rich_timbre_shifts_as_truly_as_a_lab_sine() {
+    // R-0038 exists to move *recordings*, which are never single sinusoids. A
+    // sawtooth carries a full harmonic stack, so an interpolation error that a
+    // sine hides shows up here as a mistracked fundamental.
+    let saw: Vec<f32> = (0..SR as usize)
+        .map(|i| {
+            let phase = (220.0 * i as f64 / f64::from(SR)).fract();
+            (0.8 * (2.0 * phase - 1.0)) as f32
+        })
+        .collect();
+    for (num, den, expected) in [(3, 2, 330.0), (2, 3, 220.0 * 2.0 / 3.0), (2, 1, 440.0)] {
+        let shifted = shift_pitch(&saw, SR, Ratio::new(num, den).expect("ratio")).expect("shift");
+        let measured = measured_hz(&shifted);
+        assert!(
+            cents_apart(measured, expected) < 20.0,
+            "{num}:{den} should sound at {expected:.1} Hz, measured {measured:.1} Hz"
+        );
+    }
+}
+
+#[test]
+fn ac3_shifting_down_then_up_also_recovers_the_pitch_and_the_length() {
+    // The suite already walks up-then-down. Down-then-up is the other order,
+    // and it is the one where the round trip passes through a *longer* buffer,
+    // so a length-rounding error compounds instead of cancelling.
+    let source = sine(330.0);
+    let down = shift_pitch(&source, SR, Ratio::new(2, 3).expect("ratio")).expect("shift");
+    let back = shift_pitch(&down, SR, Ratio::new(3, 2).expect("ratio")).expect("shift");
+    assert!(
+        cents_apart(measured_hz(&back), 330.0) < 20.0,
+        "down a fifth then up a fifth must return to 330 Hz"
+    );
+    assert!(
+        back.len().abs_diff(source.len()) <= 1,
+        "the round trip returned {} samples, not {}",
+        back.len(),
+        source.len()
+    );
+}
+
+#[test]
+fn ac4_an_infinite_sample_is_a_typed_error_just_like_a_nan() {
+    // "Non-finite" is two things, and only NaN was pinned.
+    let fifth = Ratio::new(3, 2).expect("ratio");
+    for poison in [f32::INFINITY, f32::NEG_INFINITY] {
+        assert!(
+            matches!(
+                shift_pitch(&[0.1, poison, 0.2], SR, fifth),
+                Err(DspError::NonFiniteSample)
+            ),
+            "{poison} was not reported as a non-finite sample"
+        );
+    }
+}
+
+#[test]
+fn ac4_no_ratio_at_any_scale_and_no_sample_rate_panics() {
+    // `Ratio` is unbounded in *both* directions and `sample_rate` is a raw
+    // `u32`; the only promise is that every combination either works or says
+    // why. Each case here either returns audio or a typed error — reaching the
+    // end of this test at all is the assertion.
+    let signals: [Vec<f32>; 4] = [
+        vec![0.5],
+        vec![0.5, -0.5],
+        vec![0.5, -0.5, 0.25],
+        (0..10).map(|i| i as f32 / 10.0 - 0.5).collect(),
+    ];
+    let ratios = [
+        (1, u64::MAX),
+        (u64::MAX, 1),
+        (u64::MAX, u64::MAX - 1),
+        (u64::MAX - 1, u64::MAX),
+        (2, u64::MAX),
+        (u64::MAX, 2),
+        (1u64 << 62, 1),
+        (1, 1u64 << 62),
+        (u64::MAX / 2, u64::MAX),
+        (7, 3),
+        (1, 1),
+    ];
+    for signal in &signals {
+        for (num, den) in ratios {
+            let ratio = Ratio::new(num, den).expect("a positive ratio");
+            for sample_rate in [1u32, 2, 44_100, 48_000, u32::MAX] {
+                match shift_pitch(signal, sample_rate, ratio) {
+                    Ok(out) => {
+                        assert!(
+                            !out.is_empty() && out.iter().all(|s| s.is_finite()),
+                            "{num}:{den} at {sample_rate} Hz produced unusable audio"
+                        );
+                        assert!(
+                            out.len() <= 600 * sample_rate as usize,
+                            "{num}:{den} at {sample_rate} Hz produced more than the ten-minute cap"
+                        );
+                    }
+                    Err(e) => assert_eq!(
+                        e,
+                        DspError::OutputTooLong,
+                        "{num}:{den} at {sample_rate} Hz failed for the wrong reason"
+                    ),
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn ac4_the_length_cap_is_ten_minutes_at_the_given_rate_on_both_sides() {
+    // `OutputTooLong` is only meaningful if it has an edge. At 100 Hz the cap
+    // is 60 000 samples: one below is audio, one above is the error. This also
+    // pins that the cap is a *duration* — the same ratio passes or fails
+    // depending only on the sample rate.
+    let one_sample = [0.5f32];
+    let at_the_cap = shift_pitch(&one_sample, 100, Ratio::new(1, 60_000).expect("ratio"));
+    assert_eq!(at_the_cap.map(|out| out.len()), Ok(60_000));
+    assert_eq!(
+        shift_pitch(&one_sample, 100, Ratio::new(1, 60_001).expect("ratio")),
+        Err(DspError::OutputTooLong)
+    );
+    // Same ratio, faster rate: comfortably inside ten minutes, so it is audio.
+    assert!(shift_pitch(&one_sample, 48_000, Ratio::new(1, 60_001).expect("ratio")).is_ok());
+}
+
+#[test]
+fn ac5_a_full_scale_input_never_leaves_the_unit_interval() {
+    // The bounds check in `ac5` runs on a 0.8-amplitude sine, which has 2 dB of
+    // headroom to absorb an interpolation overshoot. A full-scale alternating
+    // signal is the worst case the claim `|lerp(a, b)| <= max(|a|, |b|)` has to
+    // survive: every read sits between +1 and −1.
+    let full_scale: Vec<f32> = (0..1_000)
+        .map(|i| if i % 2 == 0 { 1.0 } else { -1.0 })
+        .collect();
+    for (num, den) in [(3, 2), (2, 3), (5, 4), (16, 15), (2, 1), (1, 2)] {
+        let shifted =
+            shift_pitch(&full_scale, SR, Ratio::new(num, den).expect("ratio")).expect("shift");
+        assert!(
+            shifted.iter().all(|s| s.is_finite() && s.abs() <= 1.0),
+            "{num}:{den} pushed a full-scale signal outside [-1, 1]"
+        );
+    }
+}
+
+#[test]
+fn ac2_identity_is_exact_for_values_that_are_not_musical() {
+    // Identity has to mean identity, not "close enough for audio": denormals,
+    // signed zero and the extremes of the type come back bit for bit.
+    let exotic = vec![
+        f32::MIN,
+        f32::MAX,
+        f32::MIN_POSITIVE,
+        f32::from_bits(1), // the smallest denormal
+        -0.0,
+        0.0,
+        1.0,
+        -1.0,
+    ];
+    let out = shift_pitch(&exotic, SR, Ratio::UNISON).expect("shift");
+    let bits = |v: &[f32]| v.iter().map(|s| s.to_bits()).collect::<Vec<_>>();
+    assert_eq!(bits(&out), bits(&exotic), "unison altered a sample");
+}
+
+#[test]
+fn the_final_sample_is_held_not_faded_into_silence() {
+    // A downward shift reads past the last input sample on its final steps.
+    // Holding the edge keeps the tail of the sound; treating the missing
+    // neighbour as silence would ramp every stretched buffer down to zero —
+    // an audible click at the end of every transposed one-shot.
+    let ramp: Vec<f32> = (0..3).map(|i| i as f32).collect();
+    let stretched = shift_pitch(&ramp, SR, Ratio::new(2, 3).expect("ratio")).expect("shift");
+    assert_eq!(stretched.len(), 5);
+    assert_eq!(stretched[3], 2.0);
+    assert_eq!(
+        stretched[4], 2.0,
+        "the read past the end must hold the last sample, not fade to zero"
+    );
+}
+
+#[test]
+fn the_sample_rate_does_not_change_which_samples_are_read() {
+    // The module documents resampling as dimensionless: the rate decides only
+    // whether the result is too long, never what it contains. If that ever
+    // stops being true, every caller that resamples at one rate and plays at
+    // another is silently wrong.
+    let source = sine(220.0);
+    let ratio = Ratio::new(3, 2).expect("ratio");
+    let reference = shift_pitch(&source, 48_000, ratio).expect("shift");
+    for sample_rate in [1_000u32, 8_000, 44_100, 96_000, 192_000, u32::MAX] {
+        assert_eq!(
+            shift_pitch(&source, sample_rate, ratio).expect("shift"),
+            reference,
+            "the output changed at {sample_rate} Hz"
+        );
+    }
+}
+
+#[test]
+fn ac5_a_finite_input_can_never_produce_a_non_finite_output() {
+    // The crate rejects a non-finite *input*; it must not invent one on the way
+    // out. The difference form `left + (right - left) * f` overflows f32 once
+    // the neighbours are more than `f32::MAX` apart, and `inf * 0.0` is NaN —
+    // so even the read at integer position 0 used to come back NaN.
+    let extremes = vec![f32::MIN, f32::MAX, 0.0, f32::MAX, f32::MIN];
+    for (num, den) in [(3, 2), (2, 3), (5, 4), (1, 2)] {
+        let out = shift_pitch(&extremes, SR, Ratio::new(num, den).expect("ratio")).expect("shift");
+        assert!(
+            out.iter().all(|sample| sample.is_finite()),
+            "{num}:{den} turned a finite input into {out:?}"
+        );
+    }
+}
+
+#[test]
+fn ac4_a_near_unison_ratio_with_huge_terms_is_audio_not_an_error() {
+    // `u64::MAX : u64::MAX - 1` is a hair above unison, so the honest answer is
+    // two samples. It must not be refused as though it were extreme just
+    // because `len · den` overflows an intermediate.
+    let two = [0.25f32, 0.75];
+    let hair = Ratio::new(u64::MAX, u64::MAX - 1).expect("ratio");
+    assert_eq!(shift_pitch(&two, SR, hair).map(|out| out.len()), Ok(2));
+}
+
+#[test]
+fn ac4_an_absurd_sample_rate_cannot_widen_the_length_cap() {
+    // The cap is a duration, and the caller picks the rate: without a ceiling
+    // on the rate, ten minutes at `u32::MAX` Hz is ~10 TB, which the allocator
+    // reserves lazily and then thrashes the machine filling.
+    let one_sample = [0.5f32];
+    assert_eq!(
+        shift_pitch(
+            &one_sample,
+            u32::MAX,
+            Ratio::new(1, 200_000_000).expect("ratio")
+        ),
+        Err(DspError::OutputTooLong)
+    );
+    // 192 kHz is the ceiling, so ten minutes there is still allowed.
+    assert!(
+        shift_pitch(
+            &one_sample,
+            u32::MAX,
+            Ratio::new(1, 115_200_000).expect("ratio")
+        )
+        .is_ok()
+    );
+}
