@@ -99,19 +99,11 @@ pub struct Transcription {
     pub notes: Vec<NoteEvent>,
 }
 
-/// Shared up-front validation: rejects empty input, a zero sample rate, any
-/// non-finite sample (so no downstream sum/sort is poisoned), and a window
-/// longer than the signal.
+/// Transcription's validation: the crate-wide input guard
+/// ([`crate::validate::input`]) plus the one rule only analysis has — the
+/// window may not be longer than the signal.
 pub(crate) fn validate(signal: &[f32], sample_rate: u32, cfg: &Config) -> Result<(), DspError> {
-    if signal.is_empty() {
-        return Err(DspError::EmptySignal);
-    }
-    if sample_rate == 0 {
-        return Err(DspError::InvalidSampleRate);
-    }
-    if signal.iter().any(|s| !s.is_finite()) {
-        return Err(DspError::NonFiniteSample);
-    }
+    crate::validate::input(signal, sample_rate)?;
     if cfg.window > signal.len() {
         return Err(DspError::WindowTooLarge);
     }

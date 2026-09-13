@@ -20,6 +20,8 @@ pub enum DspError {
     WindowTooLarge,
     /// The input contains a NaN or infinite sample.
     NonFiniteSample,
+    /// The requested transform would produce an implausibly long output.
+    OutputTooLong,
 }
 
 impl fmt::Display for DspError {
@@ -31,6 +33,7 @@ impl fmt::Display for DspError {
             DspError::NonFiniteSample => {
                 "the signal contains a non-finite (NaN or infinite) sample"
             }
+            DspError::OutputTooLong => "the result would be longer than this crate will produce",
         };
         f.write_str(message)
     }
