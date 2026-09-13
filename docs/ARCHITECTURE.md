@@ -12,7 +12,8 @@ requirement loop (`CLAUDE.md` §4) before implementation.
 
 ## 1. Product pillars
 
-1. **Ratio-first music math.** No scales, no note names, no chord symbols.
+1. **Ratio-first music math.** Ratios are the substrate; theory vocabulary
+   is only ever a label on top of them, never the mechanism.
    - *Pitch*: intervals are small-integer frequency ratios from the harmonic
      series — 2:1 (octave), 3:2 (fifth), 5:4 (major third), … Consonance
      correlates with ratio simplicity, so the UI can expose a single
@@ -21,6 +22,14 @@ requirement loop (`CLAUDE.md` §4) before implementation.
      distributions `E(k, n)` (k hits spread over n slots — `E(3,8)` is the
      tresillo behind half of latin/trap), and polyrhythm is just two ratios
      played against each other (3:2, 4:3).
+   - *Scales*: a scale is a **named set of ratios**, not note names — `major`
+     is `1:1 9:8 5:4 4:3 3:2 5:3 15:8`, `minor` is `1:1 9:8 6:5 4:3 3:2 8:5
+     9:5` — constructed with `PitchGrid::from_ratios`, which the ratio core has
+     offered since R-0001. Named sets are surfaced **feel-first** ("brillante ·
+     mayor"), and the harmonic odd-limit grid remains the default. What stays
+     out of scope is theory as the *mechanism*: nothing in the engine is keyed
+     on letters or chord symbols, and no user ever has to know one to make a
+     sound.
    - Everything the user touches reduces to "pick a ratio," which the app
      renders musically. Math is the interface; sound is the output.
 
@@ -201,6 +210,7 @@ UI: shows 3–5 ending-word/phrase suggestions a beat ahead; song template
 | On-device training time | Adapters only; if a corpus is too big, sample it. Cloud training is explicitly out of scope for now. |
 | candle gaps vs PyTorch | `ort` fallback behind `gooz-model`'s API; worst case a model ships as ONNX. |
 | Tauri (web UI) vs pure-Rust UI (egui) | Tauri chosen: creative UIs need rich, fast-iterating visuals; the Rust-first rule applies to everything below the UI. Revisit if the IPC boundary hurts. |
+| The founding rule read "no scales, no note names" | **Superseded 2026-09-13** (owner decision). A scale is a *named ratio set*, surfaced feel-first, so the promise the rule protected — never *needing* theory — is kept, while the prohibition on *offering* a familiar label is dropped: it was costing users a control they asked for and the ratio core already supported. |
 | Copyright of reference tracks | Influence models are local-only, trained on audio the user provides, never redistributed by the app. Sessions export only the user's own renders. |
 
 ## 9. Repository layout

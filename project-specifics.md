@@ -36,12 +36,20 @@ The concrete commands referenced by `CLAUDE.md` §6 and by the `architect` and
 Read [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the full system design.
 The non-obvious domain facts:
 
-- **Ratio-first music math.** The app never asks the user for music theory.
-  Pitch relationships are small-integer frequency ratios (octave 2:1, fifth
-  3:2, …) from the harmonic series; rhythm is beat ratios and Euclidean
-  patterns (e.g. `E(3,8)`). Consonance ≈ simplicity of the ratio. This single
-  idea is what makes "no music knowledge" possible: the UI exposes
-  simple/complex sliders, never note names.
+- **Ratio-first music math.** The app never *requires* music theory. Pitch
+  relationships are small-integer frequency ratios (octave 2:1, fifth 3:2,
+  …) from the harmonic series; rhythm is beat ratios and Euclidean patterns
+  (e.g. `E(3,8)`). Consonance ≈ simplicity of the ratio. This single idea is
+  what makes "no music knowledge" possible: the primary controls are feels and
+  simple/complex sliders, not theory vocabulary.
+- **Scales are named ratio sets.** A scale here is not note names: it is a set
+  of ratios the engine already speaks — `major` is `1:1 9:8 5:4 4:3 3:2 5:3
+  15:8`, built with the existing `PitchGrid::from_ratios`. Named sets are
+  surfaced **feel-first** ("brillante · mayor", "oscuro · menor") so a beginner
+  never needs the theory word and a musician still recognises it; the harmonic
+  odd-limit grid stays the default. Theory vocabulary is a *label* on the math,
+  never the mechanism. **This supersedes the earlier "never note names / no
+  scales" wording** (owner decision, 2026-09-13 — see ARCHITECTURE §1.1 and §8).
 - **Influence models are per-song or per-album, local, and small.** Like a
   musician absorbing influences, the user feeds reference tracks; the app
   extracts features (tempo/ratio profiles, timbre embeddings, structure) and
