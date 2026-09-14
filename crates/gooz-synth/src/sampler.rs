@@ -52,14 +52,26 @@ impl Sampler {
     ///
     /// # Errors
     ///
-    /// [`DspError::NonFiniteSample`] if any sample is NaN or infinite. This is
-    /// checked once, here, rather than per note — a single NaN makes every
-    /// shift of the recording fail, which would silence the entire part with no
-    /// indication of why. Rejecting it at the point where it can still be
-    /// re-recorded is the honest place.
+    /// [`DspError::NonFiniteSample`] if any sample is NaN or infinite, and
+    /// [`DspError::SampleOutOfRange`] if any lies outside `[-1, 1]`.
+    ///
+    /// Both are checked once, here, rather than per note. A single NaN makes
+    /// every shift of the recording fail, which silences the entire part with
+    /// no indication of why; and a sample far outside audio's range overflows
+    /// the mix the moment two notes overlap, which normalization then turns
+    /// into NaN. Rejecting both where the take can still be re-recorded is the
+    /// honest place, and it gives this type the invariant its renderer relies
+    /// on: **a `Sampler` holds audio**.
+    ///
+    /// These are the only failures caught here. A recording can still be
+    /// refused *later*, per note, by the shift itself — see
+    /// [`render_sampled_notes`].
     pub fn new(recording: Vec<f32>) -> Result<Sampler, DspError> {
         if recording.iter().any(|sample| !sample.is_finite()) {
             return Err(DspError::NonFiniteSample);
+        }
+        if recording.iter().any(|sample| sample.abs() > 1.0) {
+            return Err(DspError::SampleOutOfRange);
         }
         Ok(Sampler {
             recording,
@@ -120,7 +132,7 @@ fn voice_ratio(note: &QuantizedNote, root_octave: i32) -> Result<Ratio, RatioErr
 /// Total and panic-free. An empty recording, an empty note list, or a zero
 /// sample rate yields an empty buffer; a note whose ratio cannot be formed,
 /// whose shift is refused, or whose onset would run past
-/// [`MAX_RENDER_SAMPLES`] is skipped, because a song with one silent note is a
+/// [`max_output_samples`] is skipped, because a song with one silent note is a
 /// better answer than no song. Deterministic for a given input and config.
 ///
 /// ```
@@ -155,10 +167,12 @@ pub fn render_sampled_notes(
         let Ok(ratio) = voice_ratio(note, sampler.root_octave) else {
             continue;
         };
-        let Ok(voice) = shift_pitch(&sampler.recording, sample_rate, ratio) else {
+        // Cheap checks first: a note that cannot be placed must not pay for a
+        // resample it will never use.
+        let Some(onset) = onset_sample(note.onset_secs, sample_rate) else {
             continue;
         };
-        let Some(onset) = onset_sample(note.onset_secs, sample_rate) else {
+        let Ok(voice) = shift_pitch(&sampler.recording, sample_rate, ratio) else {
             continue;
         };
         let Some(end) = onset.checked_add(voice.len()) else {
