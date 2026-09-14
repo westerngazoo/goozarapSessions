@@ -107,14 +107,30 @@ pub fn shift_pitch(signal: &[f32], sample_rate: u32, ratio: Ratio) -> Result<Vec
 ///
 /// [`DspError::OutputTooLong`] if the count exceeds [`MAX_OUTPUT_SECS`] at
 /// this sample rate, capped by [`MAX_SANE_SAMPLE_RATE`].
+/// The longest buffer [`shift_pitch`] will return at this sample rate.
+///
+/// Exposed so callers that build a mix out of shifted voices bound themselves
+/// by the same number instead of re-deriving it — two caps that drift apart
+/// would silently disagree about what is too long.
+///
+/// ```
+/// use gooz_dsp::max_output_samples;
+///
+/// assert_eq!(max_output_samples(48_000), 600 * 48_000);
+/// // An absurd rate cannot widen it: the rate is clamped at 192 kHz.
+/// assert_eq!(max_output_samples(u32::MAX), 600 * 192_000);
+/// ```
+pub fn max_output_samples(sample_rate: u32) -> usize {
+    (MAX_OUTPUT_SECS * u64::from(sample_rate).min(MAX_SANE_SAMPLE_RATE)) as usize
+}
+
 fn output_len(input_len: usize, sample_rate: u32, ratio: Ratio) -> Result<usize, DspError> {
     // u128 so the intermediate cannot overflow into a false rejection: for a
     // ratio like `u64::MAX : u64::MAX - 1` — very nearly unison — `len · den`
     // leaves u64 long before the division cancels it back down.
     let stretched = input_len as u128 * u128::from(ratio.den());
     let out_len = stretched.div_ceil(u128::from(ratio.num()));
-    let limit = MAX_OUTPUT_SECS * u64::from(sample_rate).min(MAX_SANE_SAMPLE_RATE);
-    if out_len > u128::from(limit) {
+    if out_len > max_output_samples(sample_rate) as u128 {
         return Err(DspError::OutputTooLong);
     }
     Ok(out_len as usize)

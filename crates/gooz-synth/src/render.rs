@@ -3,6 +3,7 @@
 use gooz_dsp::QuantizedNote;
 
 use crate::distortion::Distortion;
+use crate::mix::normalize_peak;
 use crate::string::KarplusString;
 
 /// Base seed for the per-note pluck excitation (XORed with the note index so
@@ -86,16 +87,4 @@ pub fn render_notes(notes: &[QuantizedNote], sample_rate: u32, cfg: &RenderConfi
         *x = cfg.distortion.apply(*x, cfg.drive);
     }
     out
-}
-
-/// Scales the buffer so its peak magnitude is 1.0 (no-op if already silent), so
-/// the distortion sees a full-scale `[-1, 1]` signal.
-fn normalize_peak(buf: &mut [f32]) {
-    let peak = buf.iter().fold(0.0f32, |m, &x| m.max(x.abs()));
-    if peak > 0.0 {
-        let gain = 1.0 / peak;
-        for x in buf.iter_mut() {
-            *x *= gain;
-        }
-    }
 }

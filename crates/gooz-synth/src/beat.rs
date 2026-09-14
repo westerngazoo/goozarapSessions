@@ -3,6 +3,7 @@
 use gooz_ratio::{Pattern, Tempo};
 
 use crate::drums::{DrumKind, mix_hit};
+use crate::mix::normalize_peak;
 
 /// One drum lane: a Euclidean pattern, a kit voice, and a mix level.
 #[derive(Debug, Clone, PartialEq)]
@@ -75,14 +76,4 @@ pub fn render_beat(voices: &[BeatVoice], tempo: &Tempo, bars: u32, sample_rate: 
 
     normalize_peak(&mut out);
     out
-}
-
-fn normalize_peak(buf: &mut [f32]) {
-    let peak = buf.iter().fold(0.0f32, |m, &x| m.max(x.abs()));
-    if peak > 0.0 {
-        let gain = 1.0 / peak;
-        for x in buf.iter_mut() {
-            *x *= gain;
-        }
-    }
 }

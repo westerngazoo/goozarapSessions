@@ -32,7 +32,9 @@
 mod beat;
 mod distortion;
 mod drums;
+mod mix;
 mod render;
+mod sampler;
 mod string;
 
 pub use beat::{BeatVoice, render_beat};
@@ -40,6 +42,7 @@ pub use distortion::Distortion;
 pub use drums::DrumKind;
 pub use gooz_ratio::Pattern;
 pub use render::{RenderConfig, render_notes};
+pub use sampler::{Sampler, render_sampled_notes};
 
 // Re-exported so callers can construct `render_notes`'s `QuantizedNote` input
 // (and read its `degree`) naming only `gooz-synth`.
