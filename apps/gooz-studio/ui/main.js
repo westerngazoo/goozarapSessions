@@ -11,10 +11,55 @@ let node = null;
 let playing = false;
 let busy = false;
 
+// What the recording becomes: "hum" runs the hum→riff pipeline (R-0008),
+// "instrument" plays the take back across the ratio grid (R-0040).
+let mode = "hum";
+
+const MODES = {
+  hum: {
+    prompt: "hum something",
+    hint: "tap &amp; hum a melody — no theory, just a sound.",
+    label: "hum",
+    heard: "esto escuché",
+    stop: "record_stop_analyze",
+  },
+  instrument: {
+    prompt: "make any sound",
+    hint: "tap &amp; hit the table, click, knock — it becomes your instrument.",
+    label: "sound",
+    heard: "tu instrumento",
+    stop: "record_stop_instrument",
+  },
+};
+
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
 function tenseValue() {
   return Number(document.getElementById("tenseRng").value);
+}
+
+function onDemo(e) {
+  e.preventDefault();
+  demo().then(showResult);
+}
+
+// ---- mode toggle ----
+function setMode(next) {
+  if (busy || !MODES[next]) return;
+  mode = next;
+  const copy = MODES[mode];
+  document.getElementById("prompt").innerHTML =
+    `${copy.prompt}<span class="cursor">_</span>`;
+  document.getElementById("hint").innerHTML =
+    `${copy.hint} <a href="#" id="demoLink">or hear a demo ▶</a>`;
+  document.getElementById("demoLink").addEventListener("click", onDemo);
+  document.getElementById("recBtn").querySelector(".label").textContent = copy.label;
+  document.getElementById("heard").textContent = copy.heard;
+  for (const btn of document.querySelectorAll(".mode")) {
+    const on = btn.dataset.mode === mode;
+    btn.classList.toggle("is-on", on);
+    btn.setAttribute("aria-checked", String(on));
+  }
 }
 
 async function demo() {
@@ -33,8 +78,8 @@ async function onRecord() {
   try {
     if (invoke) {
       await invoke("record_start");
-      await wait(3500); // ~3.5s to hum a melody
-      showResult(await invoke("record_stop_analyze", { tense: tenseValue() }));
+      await wait(3500); // ~3.5s to hum a melody or make a sound
+      showResult(await invoke(MODES[mode].stop, { tense: tenseValue() }));
     } else {
       await wait(1500);
       showResult(await demo());
@@ -43,7 +88,7 @@ async function onRecord() {
     showResult(await demo()); // graceful fallback
   } finally {
     document.body.classList.remove("listening");
-    rec.querySelector(".label").textContent = "hum";
+    rec.querySelector(".label").textContent = MODES[mode].label;
     busy = false;
   }
 }
@@ -311,7 +356,10 @@ async function saveOrExport(cmd, label) {
 
 // ---- wire ----
 document.getElementById("recBtn").addEventListener("click", onRecord);
-document.getElementById("demoLink").addEventListener("click", (e) => { e.preventDefault(); demo().then(showResult); });
+document.getElementById("demoLink").addEventListener("click", onDemo);
+for (const btn of document.querySelectorAll(".mode")) {
+  btn.addEventListener("click", () => setMode(btn.dataset.mode));
+}
 document.getElementById("playBtn").addEventListener("click", togglePlay);
 document.getElementById("redoBtn").addEventListener("click", reset);
 document.getElementById("beatBtn").addEventListener("click", toggleBeat);

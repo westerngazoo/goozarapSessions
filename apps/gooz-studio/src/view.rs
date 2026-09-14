@@ -127,7 +127,7 @@ pub fn demo_riff() -> RiffView {
 /// Maps the smooth↔tense slider onto the harmonic-series odd-limit: `0` → the
 /// simplest grid ([`TENSE_MIN_ODD`]), `100` → the densest ([`TENSE_MAX_ODD`]),
 /// stepping through the odd harmonics in between.
-fn odd_limit_for(tense: u8) -> u64 {
+pub(crate) fn odd_limit_for(tense: u8) -> u64 {
     let b = f64::from(tense.min(100)) / 100.0;
     let rungs = (TENSE_MAX_ODD - TENSE_MIN_ODD) / 2;
     TENSE_MIN_ODD + 2 * (b * rungs as f64).round() as u64
@@ -256,12 +256,12 @@ fn beat_specs(busy: u8) -> Vec<BeatVoiceSpec> {
     ]
 }
 
-fn easy_mode_grid(tense: u8) -> PitchGrid {
+pub(crate) fn easy_mode_grid(tense: u8) -> PitchGrid {
     PitchGrid::harmonic(GRID_ROOT_HZ, odd_limit_for(tense))
         .expect("a harmonic grid with odd_limit >= 3 is valid")
 }
 
-fn easy_mode_tempo() -> Tempo {
+pub(crate) fn easy_mode_tempo() -> Tempo {
     Tempo::new(TEMPO_BPM, BEATS_PER_BAR).expect("92 BPM / 4 beats-per-bar is valid")
 }
 
