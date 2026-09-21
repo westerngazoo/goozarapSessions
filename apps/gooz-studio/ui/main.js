@@ -206,7 +206,9 @@ function scale(min, max, b) { return Math.round(min + (max - min) * (b / 100)); 
 // Backend beat when Tauri is present; otherwise a client-side synth so the
 // button still works in a plain browser preview.
 async function fetchBeat(busy) {
-  if (invoke) return invoke("beat", { busy });
+  // The beat plays under the riff, so it follows whatever the riff
+  // followed — otherwise a take heard at 126 BPM gets a 92 BPM loop.
+  if (invoke) return invoke("beat", { busy, bpm: current?.followedBpm ?? null });
   await wait(120);
   return synthBeat(busy);
 }

@@ -84,6 +84,31 @@ pub fn hum_to_riff(
     cfg: &PipelineConfig,
 ) -> Result<RiffOutcome, DspError> {
     let transcription = analyze(samples, sample_rate, &cfg.analyze)?;
+    Ok(riff_from_transcription(
+        transcription,
+        sample_rate,
+        pitch_grid,
+        tempo,
+        cfg,
+    ))
+}
+
+/// The back half of [`hum_to_riff`], on an analysis that already ran: snap to
+/// the grids (R-0006), render (R-0007), pad to whole bars.
+///
+/// Split out because a caller that must *look* at the transcription before it
+/// can choose the grid and the tempo — R-0041's follow, which reads the take's
+/// key and pulse — would otherwise pay for [`analyze`] twice, and analysis is
+/// the expensive half by a wide margin.
+///
+/// Total: the analysis has already succeeded, and nothing below it can fail.
+pub fn riff_from_transcription(
+    transcription: Transcription,
+    sample_rate: u32,
+    pitch_grid: &PitchGrid,
+    tempo: &Tempo,
+    cfg: &PipelineConfig,
+) -> RiffOutcome {
     let notes = quantize_notes(&transcription.notes, pitch_grid, tempo, cfg.subdivision);
     let raw = render_notes(&notes, sample_rate, &cfg.render);
 
@@ -104,9 +129,9 @@ pub fn hum_to_riff(
             bars: bars as u32,
         }
     };
-    Ok(RiffOutcome {
+    RiffOutcome {
         stem,
         notes,
         transcription,
-    })
+    }
 }
