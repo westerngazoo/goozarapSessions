@@ -22,6 +22,8 @@ pub enum DspError {
     NonFiniteSample,
     /// The requested transform would produce an implausibly long output.
     OutputTooLong,
+    /// A sample lies outside the `[-1, 1]` range audio is carried in.
+    SampleOutOfRange,
 }
 
 impl fmt::Display for DspError {
@@ -34,6 +36,9 @@ impl fmt::Display for DspError {
                 "the signal contains a non-finite (NaN or infinite) sample"
             }
             DspError::OutputTooLong => "the result would be longer than this crate will produce",
+            DspError::SampleOutOfRange => {
+                "a sample lies outside the [-1, 1] range audio is carried in"
+            }
         };
         f.write_str(message)
     }

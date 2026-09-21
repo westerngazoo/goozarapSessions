@@ -4,7 +4,7 @@
 //! by reading back the ratio that was asked for: if the recording does not
 //! actually sound a fifth higher at degree `3:2`, these fail.
 
-use gooz_dsp::{Config, pitch_track};
+use gooz_dsp::{Config, max_output_samples, pitch_track};
 use gooz_ratio::PitchGrid;
 use gooz_synth::{Distortion, QuantizedNote, Ratio, RenderConfig, Sampler, render_sampled_notes};
 
@@ -102,7 +102,15 @@ fn ac1_the_grid_plays_the_recording_at_the_asked_for_ratio() {
 fn ac2_at_unison_the_recording_is_placed_unshifted() {
     // Not "close to" the source — the source times one gain factor. A resampled
     // approximation would drift sample by sample; a placement cannot.
-    let source = recording(220.0);
+    //
+    // The source decays, so it sweeps the whole amplitude range on its way to
+    // silence: a steady sine only ever visits its own peak region, and a
+    // renderer that gated quiet audio away would look identical through one.
+    let source: Vec<f32> = recording(220.0)
+        .iter()
+        .enumerate()
+        .map(|(i, sample)| sample * (-8.0 * i as f32 / SR as f32).exp())
+        .collect();
     let rendered = render_one(&sampler(source.clone()), Ratio::UNISON, 0);
     assert_eq!(
         rendered.len(),
@@ -119,6 +127,15 @@ fn ac2_at_unison_the_recording_is_placed_unshifted() {
         assert!(
             (here - gain).abs() < 1e-4,
             "sample {i}: gain {here} drifted from {gain} — this is a resample, not a placement"
+        );
+    }
+    // The quiet samples too: a ratio test can only speak where it can divide,
+    // and a renderer that zeroed or gated everything below the noise floor
+    // would satisfy the loop above.
+    for (i, (&out, &src)) in rendered.iter().zip(&source).enumerate() {
+        assert!(
+            (out - src * gain).abs() < 1e-6,
+            "sample {i}: {out} is not {src} times {gain}"
         );
     }
 }
@@ -208,11 +225,26 @@ fn ac5_a_full_scale_recording_stays_inside_the_unit_interval() {
 
 #[test]
 fn ac6_the_same_recording_and_notes_render_identically() {
-    let sampler = sampler(recording(220.0));
-    let notes = [note(Ratio::new(5, 4).expect("ratio"), 0, 0.0)];
-    let first = render_sampled_notes(&sampler, &notes, SR, &clean());
-    let second = render_sampled_notes(&sampler, &notes, SR, &clean());
-    assert_eq!(first, second);
+    // Two independently built samplers over equal recordings, and a note list
+    // that exercises both skip paths — determinism has to survive the branches
+    // that do nothing as well as the ones that mix.
+    let source = recording(220.0);
+    let notes = [
+        note(Ratio::new(5, 4).expect("ratio"), 0, 0.0),
+        note(Ratio::UNISON, 64, 0.3),
+        note(Ratio::new(3, 2).expect("ratio"), -1, 0.25),
+        note(Ratio::UNISON, 0, f64::NAN),
+    ];
+    let first = render_sampled_notes(&sampler(source.clone()), &notes, SR, &clean());
+    let second = render_sampled_notes(&sampler(source.clone()), &notes, SR, &clean());
+    assert!(
+        !first.is_empty(),
+        "a determinism check over an empty buffer proves nothing"
+    );
+    // Bit patterns, not `f32` equality: `-0.0 == 0.0` is true, and two renders
+    // that disagree on a sign bit are not the same buffer.
+    let bits = |buf: &[f32]| buf.iter().map(|s| s.to_bits()).collect::<Vec<u32>>();
+    assert_eq!(bits(&first), bits(&second));
 }
 
 #[test]
@@ -306,4 +338,185 @@ fn a_recording_with_a_nan_is_refused_when_it_is_still_fixable() {
         Sampler::new(Vec::new()).is_ok(),
         "an empty instrument is silence, not an error"
     );
+}
+
+#[test]
+fn ac1_a_degree_below_and_above_the_unit_octave_plays_as_asked() {
+    // Nothing constrains a `QuantizedNote`'s degree to `[1, 2)`, and the
+    // sampler shifts by the degree it is given — it does not fold it into an
+    // octave first. Every other degree in this file already sits in `[1, 2)`,
+    // so folding would be invisible without this.
+    let sampler = sampler(recording(220.0));
+    let root = measured_hz(&render_one(&sampler, Ratio::UNISON, 0));
+    // Kept inside YIN's 80 Hz–1 kHz default range so the measurement is real.
+    for (num, den) in [(2, 3), (5, 2), (4, 1)] {
+        let ratio = Ratio::new(num, den).expect("ratio");
+        let measured = measured_hz(&render_one(&sampler, ratio, 0));
+        let expected = root * num as f64 / den as f64;
+        assert!(
+            cents_apart(measured, expected) < 20.0,
+            "degree {num}:{den} should sound at {expected:.1} Hz, measured {measured:.1} Hz"
+        );
+    }
+}
+
+#[test]
+fn overlapping_notes_are_mixed_not_overwritten() {
+    // "Mixed into a loopable buffer" is the requirement's own word. A renderer
+    // that wrote each voice over the last would pass every other test here:
+    // non-overlapping notes cannot tell addition from assignment.
+    let level = vec![0.5f32; 1_000];
+    let sampler = sampler(level);
+    let overlap_at = 500usize;
+    let notes = [
+        note(Ratio::UNISON, 0, 0.0),
+        note(Ratio::UNISON, 0, overlap_at as f64 / f64::from(SR)),
+    ];
+    let out = render_sampled_notes(&sampler, &notes, SR, &clean());
+    assert_eq!(out.len(), 1_500, "the second copy did not land 500 in");
+    let alone = out[overlap_at - 1];
+    let both = out[overlap_at + 100];
+    assert!(
+        (both - 2.0 * alone).abs() < 1e-6,
+        "one copy reads {alone}, two overlapping copies read {both} — they were not summed"
+    );
+}
+
+#[test]
+fn a_shift_the_dsp_refuses_silences_its_note_not_the_part() {
+    // Twenty octaves down is a ratio that forms fine and a buffer the shifter
+    // refuses (`OutputTooLong`) — a different skip path from AC4's unformable
+    // ratio, and the one that reaches `shift_pitch`. It is the NaN failure
+    // shape: an error raised per note that could take the whole part with it.
+    let source = recording(220.0);
+    let sampler = sampler(source.clone());
+    let notes = [note(Ratio::UNISON, -20, 1.0), note(Ratio::UNISON, 0, 0.0)];
+    let out = render_sampled_notes(&sampler, &notes, SR, &clean());
+    assert_eq!(
+        out.len(),
+        source.len(),
+        "a refused shift took the rest of the part with it"
+    );
+    assert!(out.iter().any(|s| *s != 0.0), "the good note fell silent");
+}
+
+#[test]
+fn an_onset_that_is_not_a_time_is_skipped_not_folded_to_zero() {
+    // A negative `onset_secs` saturates to 0 on the `as usize` cast, so without
+    // the guard the note would sound at the top of the bar rather than not at
+    // all — audible, wrong, and invisible to a length assertion alone.
+    let source = recording(220.0);
+    let sampler = sampler(source.clone());
+    let half = SR as usize / 2;
+    for bad in [-1.0, -1e18, f64::NAN, f64::NEG_INFINITY, f64::INFINITY] {
+        let notes = [note(Ratio::UNISON, 0, bad), note(Ratio::UNISON, 0, 0.5)];
+        let out = render_sampled_notes(&sampler, &notes, SR, &clean());
+        assert_eq!(
+            out.len(),
+            half + source.len(),
+            "onset {bad} changed the length of the mix"
+        );
+        assert!(
+            out[..half].iter().all(|sample| *sample == 0.0),
+            "onset {bad} sounded at time zero instead of being skipped"
+        );
+    }
+}
+
+#[test]
+fn a_note_that_would_ring_past_the_output_cap_is_skipped_at_the_boundary() {
+    // The mixer carries the shifter's own cap so the two cannot disagree about
+    // what is too long. A low rate keeps the cap small enough to test at its
+    // edge — and an unusual `sample_rate` is caller data too.
+    let rate = 100;
+    let cap = max_output_samples(rate);
+    let source = vec![0.4f32; 1_000];
+    let sampler = sampler(source.clone());
+    let at = |onset: usize| {
+        render_sampled_notes(
+            &sampler,
+            &[note(Ratio::UNISON, 0, onset as f64 / f64::from(rate))],
+            rate,
+            &clean(),
+        )
+    };
+    assert_eq!(
+        at(cap - source.len()).len(),
+        cap,
+        "a note that ends exactly on the cap must still play"
+    );
+    assert!(
+        at(cap - source.len() + 1).is_empty(),
+        "a note that ends one sample past the cap must be skipped"
+    );
+}
+
+#[test]
+fn the_root_octave_is_where_the_recording_plays_unshifted() {
+    // The doc's claim, measured rather than read: at `root_octave` the degree
+    // `1:1` is the recording itself, and the octave above it is a real octave.
+    let source = recording(220.0);
+    let home = render_one(&sampler(source.clone()), Ratio::UNISON, 0);
+    let home_hz = measured_hz(&home);
+    for root in [-5, -1, 0, 3, 7] {
+        let instrument = sampler(source.clone()).rooted_at_octave(root);
+        let unshifted =
+            render_sampled_notes(&instrument, &[note(Ratio::UNISON, root, 0.0)], SR, &clean());
+        assert_eq!(
+            unshifted, home,
+            "rooted at octave {root}, degree 1:1 at octave {root} was not the recording"
+        );
+        let up = render_sampled_notes(
+            &instrument,
+            &[note(Ratio::UNISON, root + 1, 0.0)],
+            SR,
+            &clean(),
+        );
+        assert_eq!(up.len(), home.len() / 2, "root {root}: octave up length");
+        assert!(
+            cents_apart(measured_hz(&up), home_hz * 2.0) < 20.0,
+            "root {root}: the octave above the instrument's root is not an octave"
+        );
+    }
+}
+
+#[test]
+fn ac5_an_overlapping_mix_of_a_full_range_recording_stays_finite() {
+    // Two notes at one onset sum past `f32::MAX` if the recording is allowed to
+    // hold values audio never holds; `normalize_peak` then computes
+    // `1.0 / inf == 0.0`, and `inf * 0.0` is NaN — over the whole part.
+    let sampler = sampler(vec![1.0; 64]);
+    let both = [note(Ratio::UNISON, 0, 0.0), note(Ratio::UNISON, 0, 0.0)];
+    for cfg in [clean(), RenderConfig::default()] {
+        let out = render_sampled_notes(&sampler, &both, SR, &cfg);
+        assert!(
+            out.iter().all(|s| s.is_finite() && s.abs() <= 1.0 + 1e-6),
+            "overlapping full-scale notes left [-1, 1]: {:?}",
+            &out[..4]
+        );
+    }
+    // And a recording outside audio's range is refused outright.
+    assert!(Sampler::new(vec![2.0e38; 4]).is_err());
+    assert!(Sampler::new(vec![-1.5; 4]).is_err());
+}
+
+#[test]
+fn ac5_a_recording_too_quiet_to_invert_stays_bounded() {
+    // `gain = 1.0 / peak` overflows f32 once the peak drops below
+    // `1.0 / f32::MAX` — measured boundary, exactly.
+    for peak in [1.0e-45f32, 1.0 / f32::MAX, 2.938736e-39] {
+        for cfg in [clean(), RenderConfig::default()] {
+            let out = render_sampled_notes(
+                &sampler(vec![peak; 64]),
+                &[note(Ratio::UNISON, 0, 0.0)],
+                SR,
+                &cfg,
+            );
+            assert!(
+                out.iter().all(|s| s.is_finite() && s.abs() <= 1.0 + 1e-6),
+                "peak {peak:e} left [-1, 1]: {:?}",
+                &out[..4]
+            );
+        }
+    }
 }

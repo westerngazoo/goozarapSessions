@@ -143,7 +143,7 @@ this spec claimed those guard errors "cannot fire here"; that was wrong.)
 `(1e18 · sample_rate).round() as usize` saturates to `usize::MAX`, whose
 `resize` aborts the process — the same float-cast saturation the architect found
 in `shift_pitch` and the same class again. A note whose onset is non-finite,
-negative, or past `MAX_RENDER_SAMPLES` (`gooz_dsp::max_output_samples`, newly exposed so the mixer and the shifter cannot drift apart) is skipped.
+negative, or past `max_output_samples` (`gooz_dsp::max_output_samples`, newly exposed so the mixer and the shifter cannot drift apart) is skipped.
 
 While writing this guard I confirmed `render_notes` (R-0007) has the identical
 bug on `main` and panics today; it is filed as issue #71 rather than fixed here,
@@ -159,6 +159,25 @@ and the rate non-zero) fall into the same skip.
 `render.rs` and `beat.rs` — a pre-existing §2 violation. It moves to a private
 `mix` module with three callers, so this requirement removes a duplication
 rather than adding one.
+
+### Known limitation — a skip can still swallow a whole part
+
+`Sampler::new` catches the one cause that affected *every* note at once
+(a non-finite recording, and now a sample outside `[-1, 1]`). It cannot catch
+the rest, because they depend on the `sample_rate` and the notes, which only
+arrive at render time. Measured, each returns an empty buffer with no signal to
+the caller:
+
+- a recording longer than `max_output_samples` for the rate (600 s + 1 sample at
+  48 kHz) — every shift is refused;
+- an unusual rate (`sample_rate = 1` with a 4 800-sample recording);
+- `rooted_at_octave` far from the notes (a 30 s recording rooted 5 octaves away
+  wants 16 minutes per note; 64 octaves away overflows the ratio);
+- every onset past the cap.
+
+The decision log names silent skipping as deliberate for *a* note. None of these
+is one note. The answer is the skip report already deferred to R-0029/R-0031 —
+tracked, not hidden.
 
 ### Inherited limitation
 
@@ -216,5 +235,6 @@ None.
 ## Changelog
 
 - 2026-09-13 — created; proposed for architect review.
+- 2026-09-13 — QA run: FAIL on AC5 (two NaN/inf paths in `normalize_peak`), fixed; whole-part skip causes recorded as a known limitation.
 - 2026-09-13 — architect review round 1 (request changes): `root_octave`, fallible `Sampler::new`, shared output cap, AC3/AC4 mappings corrected, inherited aliasing recorded.
 - 2026-09-13 — amended during implementation: `Distortion::Bypass`, the onset guard, and `normalize_peak`'s pre-existing duplication.
