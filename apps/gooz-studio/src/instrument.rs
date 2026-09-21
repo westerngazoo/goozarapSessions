@@ -37,10 +37,13 @@ const TAKE_OCTAVE: i32 = 0;
 /// # Errors
 ///
 /// [`DspError::EmptySignal`] for an empty take, [`DspError::InvalidSampleRate`]
-/// for a zero rate, and [`DspError::NonFiniteSample`] if the take contains a
-/// NaN or infinite sample. An empty take is rejected here rather than in
-/// [`Sampler`], which accepts an empty recording on purpose: an instrument with
-/// nothing in it is silence, but an empty *take* means the recording failed.
+/// for a zero rate, and — from [`Sampler::new`], which holds the "this is
+/// audio" invariant — [`DspError::NonFiniteSample`] for a NaN or infinite
+/// sample and [`DspError::SampleOutOfRange`] for one outside `[-1, 1]`.
+///
+/// An empty take is rejected *here* rather than in [`Sampler`], which accepts
+/// an empty recording on purpose: an instrument with nothing in it is silence,
+/// but an empty *take* means the recording failed.
 pub fn instrument_from_take(
     samples: &[f32],
     sample_rate: u32,

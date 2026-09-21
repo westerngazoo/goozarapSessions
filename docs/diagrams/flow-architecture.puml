@@ -1,0 +1,16 @@
+@startuml
+title goozarap — flujo de componentes
+start
+:VOICEVoice;
+:DSPgooz-dsp;
+:DSP;
+:RATgooz-ratio;
+:RAT;
+:SYNgooz-synth;
+:SYN;
+:AUDgooz-audio;
+:AUD;
+:SESgooz-session;
+stop
+
+@enduml

@@ -112,6 +112,14 @@ fn ac5_a_failed_recording_is_a_typed_error() {
         instrument_from_take(&broken, SR, TENSE).unwrap_err(),
         DspError::NonFiniteSample
     );
+    // A take that is not audio is refused too — the invariant `Sampler` gained
+    // after QA found an overlapping mix of out-of-range samples rendering NaN.
+    let mut too_hot = hum();
+    too_hot[100] = 4.0;
+    assert_eq!(
+        instrument_from_take(&too_hot, SR, TENSE).unwrap_err(),
+        DspError::SampleOutOfRange
+    );
 }
 
 #[test]

@@ -1,0 +1,13 @@
+@startuml
+title goozarap — secuencia principal
+
+participant "Hum-to-riff" as Humtoriff0
+participant "Beat" as Beat1
+participant "Session" as Session2
+participant "Influence" as Influence3
+
+Humtoriff0 -> Beat1: Euclidean E(k,n) templates → synthesized kit.
+Beat1 -> Session2: Stems + takes + arrangement → WAV mixdown.
+Session2 -> Influence3: Reference tracks → feature extract → local adapter training.
+
+@enduml
