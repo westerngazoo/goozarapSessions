@@ -4,7 +4,7 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
-use gooz_dsp::{Config, NoteEvent, analyze, estimate_bpm};
+use gooz_dsp::{Config, NoteEvent, analyze, tempo_of};
 use gooz_ratio::PitchGrid;
 
 use crate::error::ModelError;
@@ -76,7 +76,7 @@ pub fn extract_features(
         format_version: FEATURE_FORMAT_VERSION,
         sample_rate,
         duration_secs,
-        tempo_bpm: estimate_bpm(&onset_times).unwrap_or(0.0),
+        tempo_bpm: tempo_of(samples, sample_rate).unwrap_or(0.0),
         onset_density,
         rms: rms(samples),
         brightness: zero_crossing_rate(samples),

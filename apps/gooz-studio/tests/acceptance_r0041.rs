@@ -308,7 +308,6 @@ fn ac7_a_described_song_follows_a_prompt_not_a_take() {
 }
 
 #[test]
-#[ignore = "QA R-0041 FAIL: beat_view panics or renders a degenerate loop for a bpm outside 60..=180"]
 fn ac7_the_beat_survives_any_tempo_it_is_handed() {
     // `beat` is a Tauri command, so this number arrives from the webview. The
     // riff's followed tempo is always inside 60..=180, but nothing holds any

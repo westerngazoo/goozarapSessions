@@ -1,6 +1,6 @@
 # SPEC-0041 — Follow me
 
-- **Status:** Accepted — architect-reviewed (round 1: request changes, addressed)
+- **Status:** Accepted — architect round 1 addressed; QA round 1 FAIL addressed by a redesign of the tempo method (owner decision)
 - **Realizes:** R-0041
 - **Author:** Claude (owner: Gustavo Delgadillo)
 - **Created:** 2026-09-21
@@ -15,26 +15,33 @@ Realize R-0041: let a take say how fast it is and where it sits.
 ## 2. Design
 
 ```
-take ──analyze──┬─ onsets  ──▶ estimate_bpm ──▶ fold into range ──▶ Option<f64>
-                └─ pitches ──▶ median voiced  ──────────────────▶ Option<f64>
+take ──┬── analyze ── pitch track ── voiced runs ≥ 80 ms ── median ──▶ root_hz: Option
+       │
+       └── loudness per 10 ms ── rises past 1 dB ── spread ±30 ms ──
+               autocorrelation over 30–180 BPM, leaning to 120 ──
+               strongest repeat ≥ 0.4 ? fold < 60 up once ──────────▶ bpm: Option
 ```
 
-One `analyze` call, not two: it already returns the pitch track and the onsets
-together, so following a take costs exactly one pass over it.
+Pitch comes from the analysis R-0005 already runs. **Tempo does not**: it is
+read from the signal's own loudness, which the transcription does not carry.
 
 ### The numbers
 
 Every acceptance outcome turns on these, so they are the design, not detail.
-Each was chosen by measuring a signal that got through without it.
+Each was chosen against a signal measured to get through without it.
 
-| Constant | Value | What it rejects, measured |
+| Constant | Value | Why |
 |---|---|---|
-| `MIN_ONSETS` | 3 | Two notes 9 s apart reported a confident **103.2 BPM**. One interval is a gap, not a tempo. |
-| `MAX_IOI_SPREAD` | 0.15 | A free-time hum (spread 0.54) reported **117.8 BPM**. A long-short feel is *not* rejected: `0.4 s`/`0.8 s` is one grid of `0.4 s`, reported as 150 BPM. |
-| `MAX_FOLDS` | 2 | At eight folds (256×) every take with ≥2 onsets landed in range, making `None` unreachable and the `Option` decorative. |
-| `MIN_VOICED_FRAMES` | 8 | A handful of frames is not a phrase. |
-| `MIN_VOICED_SECS` | 0.25 | Nor is 20 ms of it. |
-| `MIN_VOICED_DENSITY` | 0.5, **within the voiced span** | Measured against the whole take instead, a 1.5 s hum with 3 s of lead-in reported **no root**, while the same hum with 2 s reported 220 Hz — a cliff edge on the most ordinary shape a take has. |
+| `FRAME_STEP_SECS` | 10 ms | Fixed in time, so a take reads the same at 16, 44.1 and 48 kHz. |
+| `FRAME_WINDOW_SECS` | 40 ms | Several periods of any sung pitch, so a steady note's loudness does not ripple. |
+| `SILENCE_DB` | −60 dBFS | Loudness floor: an attack out of silence rises from here, not from −∞. |
+| `RISE_FLOOR_DB` | 1 dB | A held note moves by hundredths of a dB; an onset by several. A held hum — which reported **122 BPM** under the old design — contributes no attacks at all. |
+| `ATTACK_SPREAD_SECS` | ±30 ms | Unspread, a ±20 ms human wobble made successive beats miss each other and a 92 BPM take was refused. |
+| `SLOWEST_SEARCHED_BPM` | 30 | A 40 BPM pulse repeats at no period inside 60–180; it has to be found at its own and doubled. |
+| `MIN_PULSE_STRENGTH` | 0.4 | Three even hits score ≈ ⅔; two close hits and a distant third score ≈ ⅓ — which the old design reported as **120 BPM**, its spread gate unable to fire on two intervals. |
+| `PRIOR_CENTRE_BPM` / width | 120 / 1 octave | Breaks the tie when a pulse repeats about equally at two octaves, without overruling one that is clearly stronger. |
+| `MIN_RUN_SECS` | 80 ms | A sung note is at least this long; shorter runs are breath or consonants. |
+| `MIN_VOICED_SECS` | 0.25 s | Total sung voicing a root may be read from. |
 
 ### Types (`gooz-dsp/src/follow.rs`)
 
@@ -67,41 +74,55 @@ grid and the clock, once to render on them. Without the split, following a take
 doubled the pipeline's analysis cost. `pipeline.rs` gains
 `riff_from_transcription` for the same reason, and R-0042 will want both.
 
-### Tempo (AC1, AC3, AC4)
+### Tempo (AC1, AC3, AC4): autocorrelation of energy attacks
 
-`estimate_bpm` **moves here** from `gooz-model::features` (R-0015's one call
-site imports it back, with its unit test). Two changes, not "unchanged":
+**Why not the median of onset intervals.** That was the first design, and three
+rounds of review kept finding new ways it failed. Spectral-flux onsets fire on
+the steady wobble of a held note — vibrato, or just a sustained harmonic tone —
+and a wobble is perfectly regular, so no interval gate can refuse it: a held hum
+reported 122 BPM, vibrato 165. Swing has two interval lengths and no single
+median pulse: 2:1 swing at 120 reported 90.7 or 175.8 depending on how many
+notes were sung. With exactly three onsets the spread gate could never fire.
+Each gate fixed one case and the next review found another.
 
-- it returns **`Option<f64>`** rather than a `0.0` sentinel — and the sentinel
-  was not even complete, since `estimate_bpm(&[0.0, f64::MIN_POSITIVE])`
-  returned `inf`. `gooz-model` applies `.unwrap_or(0.0)` at its own format
-  boundary, where `0.0` is genuinely part of the documented file format;
-- the sort is `total_cmp` rather than `partial_cmp().unwrap_or(Equal)`.
+**What replaces it** is the method beat trackers use:
 
-The median is an **order statistic, lower middle for even counts** — never the
-average of the two middle values, which invents a number the take never
-contained (`0.4 s` and `0.8 s` averaged to `0.6 s`, a pulse matching neither).
-The lower middle specifically, so a 50/50 long-short pattern does not flip its
-answer between 150 BPM and nothing depending on how many notes were played.
+1. **Attacks, not onsets.** Loudness in dB every 10 ms over a 40 ms window;
+   each frame's rise over the last, less a 1 dB floor. Pitch wobble at constant
+   loudness contributes nothing.
+2. **Spread** each attack over ±30 ms, so a hand-played beat that lands a
+   little early still lines up with one that lands a little late.
+3. **Autocorrelate** over the periods of 30–180 BPM, weighted toward 120 BPM by
+   a one-octave log-Gaussian so that a pulse heard at two octaves resolves to
+   the one people usually feel. A swung bar repeats at the beat; rests
+   reinforce the period rather than break it.
+4. **Refuse** when the strongest repeat is below 0.4 of the envelope's energy.
+5. **Refine** between frames with a parabola through the peak and its
+   neighbours, then **fold** a pulse found below 60 BPM up by one octave.
 
-Folding: a median IOI routinely lands on half or double the felt pulse, so the
-raw estimate is doubled while below `MIN_BPM` and halved while above `MAX_BPM`,
-up to a bounded number of steps. If it still does not land in range — or if
-there were fewer than two onsets — the answer is `None`, not a number nobody
-asked for. Range: `60..=180`.
+`tempo_of(signal, sample_rate)` is public and is now the project's **only**
+tempo estimator. R-0015's `extract_features` uses it too, replacing a plain
+median of intervals — so a reference with no pulse writes the format's `0.0`
+instead of a tempo spectral flux invented, and a pulsed reference is measured
+the same way a take is.
 
-### Root (AC2, AC3)
+### Root (AC2, AC3): sung notes, read in runs
 
-The median of the voiced frames' `f0_hz`. Voiced means `f0_hz.is_some()`; YIN
-has already made that call (R-0005).
+The median pitch of the take's **sung notes**. Voicing is read in runs of
+continuous voiced frames; runs under 80 ms are set aside as breath, consonants
+or a stray frame, and what remains must add up to a quarter of a second.
 
-Two gates before the median counts as *heard*:
-- at least `MIN_VOICED_FRAMES` voiced frames, and
-- voiced frames are at least `MIN_VOICED_FRACTION` of all frames.
+The previous gate measured voicing *density* — first against the whole take,
+which refused a phrase with silence around it, then against the voiced span,
+which QA showed still refused detached notes (each shorter than half its beat)
+and two phrases with a breath between them. Both are ordinary singing. The real
+question is whether there are sung notes, not how much of the take they fill.
 
-The second is what keeps a knock from reporting a key: percussive noise
-produces a scattering of spurious voiced frames, and a median over three of
-them is a number with no signal in it.
+The median is an order statistic, lower middle for even counts. It is the take's
+**central pitch, not its tonic**: QA measured a two-octave C-major arpeggio
+following to E, where the harmonic grid then snaps its C's to B. That is the
+accepted non-goal of R-0041 §4, made visible — a key centre needs R-0037's
+scales and a real key finder.
 
 ### What the caller does with the `Option`s (AC7)
 
@@ -164,11 +185,19 @@ None.
 
 | Date | Decision | Rationale |
 |------|----------|-----------|
+| 2026-09-26 | **Tempo is an autocorrelation of energy attacks**, replacing the median of onset intervals (owner decision) | QA round 1: a held hum reported 122 BPM, vibrato 165, three scattered notes 120, and swing flipped between 90.7 and 175.8 with the note count. Three rounds of gates had not converged; the method was wrong. |
+| 2026-09-26 | **Swing is in scope** (owner decision) | Corrido tumbado and much trap are felt in triplets; a take sung with swing has to be followed at its beat. |
+| 2026-09-26 | **One tempo estimator** for the project: R-0015 uses `tempo_of` too | Two estimators drift, and the old one was the thing that failed. R-0015's output changes for references with no pulse (now `0.0`) — pinned by tests. |
+| 2026-09-26 | **The root is read from sung runs**, not voicing density | QA round 1: density refused detached notes and two phrases with a breath. |
+| 2026-09-26 | **A `bpm` from the webview must be in range to count as followed** | QA round 1: `beat_view(_, Some(1e-300))` overflowed the beat builder into a panic; `1e9` rendered a two-sample beat. |
+| 2026-09-26 | **The beat is re-fetched for every new riff**, and the result shows the tempo it was laid out at | QA round 1: a beat fetched earlier was mixed under a riff at another tempo and saved under settings claiming the new one; the label said "92 bpm" for everything. |
 | 2026-09-21 | One `analyze` call, not `pitch_track` + `detect_onsets` separately | `analyze` already does both in one pass and is the reviewed entry point; calling the halves separately would double the work and duplicate its validation. |
 | 2026-09-21 | A voiced *fraction* gate, not just a voiced *count* | Three spurious voiced frames in a snare hit would otherwise be enough to report a key, and a wrong key is worse than no key: the caller's fallback is at least a known quantity. |
 | 2026-09-21 | `followed_grid` / `followed_tempo` are new (and private), rather than changing `easy_mode_*` | The demo wants the old meaning, and changing the existing functions under it would silently re-tune a fixed reference. (An earlier draft claimed R-0027's path was a second such caller; it is not — `describe.rs` uses `GRID_ROOT_HZ` directly and builds its own `Tempo`.) |
 | 2026-09-21 | `demo_riff` calls `hum_to_riff` directly rather than going through `riff_from_take` | It used to be implemented in terms of it, which made "the demo does not follow" impossible: measured, the demo hum reports 126.4 BPM and 333 Hz, so it would have re-tuned itself and broken its own existing test. A golden test now pins the demo's ratio sequence, bar count and length. |
 
 ## Changelog
+
+- 2026-09-26 — QA round 1 (FAIL): tempo method redesigned, root gate replaced, R-0015 moved onto the same estimator, beat guarded and re-fetched.
 
 - 2026-09-21 — created; proposed for architect review.

@@ -7,12 +7,22 @@
 //! defaults are, and inventing one here would make it impossible for a UI to
 //! say truthfully which of the two it actually followed.
 //!
-//! **Refusing to answer is the hard part.** An estimator with no gates always
-//! produces a number: two notes nine seconds apart yield a confident 103 BPM,
-//! and a free-time hum yields 117.8. Both are worse than silence, because the
-//! caller's fallback is at least a known quantity. The gates below are what
-//! make `None` reachable for the right reasons, and each one is here because a
-//! measured signal got through without it.
+//! # Why the tempo is an autocorrelation, not a median of intervals
+//!
+//! The first design measured intervals between spectral-flux onsets and took
+//! their median, then added gates for every way that went wrong. Three rounds
+//! of review later it still reported a held hum at 122 BPM — spectral flux
+//! fires on the steady wobble of a sustained note, and a wobble is perfectly
+//! regular, so no interval gate can refuse it — and it could not follow swing,
+//! whose two interval lengths have no single "median" pulse.
+//!
+//! [`tempo_of`] is the method beat trackers use instead. It builds an envelope
+//! of **energy attacks** — rises in loudness, which a held note does not have
+//! however much it wobbles in pitch — and asks at which period that envelope
+//! best repeats itself. A swung bar repeats at the beat, rests reinforce the
+//! period rather than break it, and a take with no repeating attacks simply has
+//! no strong period. Refusing to answer falls out of the method instead of
+//! being bolted onto it.
 
 use crate::error::DspError;
 use crate::transcribe::{Config, PitchFrame, Transcription, analyze};
@@ -22,44 +32,74 @@ pub const MIN_BPM: f64 = 60.0;
 /// The fastest tempo this crate will report, in BPM.
 pub const MAX_BPM: f64 = 180.0;
 
-/// How many times a raw estimate may be doubled or halved.
+/// The attack envelope's frame step, in seconds (100 frames a second).
 ///
-/// Two, not more: a detector reporting double or half the felt pulse is
-/// agreeing with the listener, but at four octaves of slack *any* interval
-/// lands in range and the answer stops meaning anything. Measured, eight folds
-/// made `None` unreachable for every take with two or more onsets.
-const MAX_FOLDS: u32 = 2;
+/// Fixed in *time*, not samples, so a take reads the same at 16, 44.1 or
+/// 48 kHz. The previous design's resolution depended on the analysis hop, which
+/// moved the answer by several BPM between sample rates.
+const FRAME_STEP_SECS: f64 = 0.010;
 
-/// The fewest onsets a pulse may be read from.
+/// The window each frame's loudness is measured over, in seconds.
 ///
-/// Three, so there are at least two intervals to compare. One interval is a
-/// gap, not a tempo — two notes nine seconds apart otherwise reported 103 BPM.
-const MIN_ONSETS: usize = 3;
+/// Several periods of any sung pitch, so a steady tone's loudness does not
+/// ripple with where the window happens to fall on its waveform.
+const FRAME_WINDOW_SECS: f64 = 0.040;
 
-/// How uneven the intervals may be, as median-absolute-deviation over median.
+/// Frames quieter than this are silence, in dBFS. Loudness is floored here, so
+/// an attack out of silence counts as rising from the floor rather than from
+/// the `-∞` of digital zero.
+const SILENCE_DB: f64 = -60.0;
+
+/// The smallest frame-to-frame rise that counts toward an attack, in dB.
 ///
-/// A steady pulse sits near zero, and so does a long-short feel — `0.4 s` and
-/// `0.8 s` are one grid of `0.4 s`, which is a real pulse and is reported as
-/// 150 BPM. What this rejects is a take with no grid at all: a free-time hum
-/// measured 0.54, and two notes nine seconds apart have no spread to measure
-/// because they have only one interval (see [`MIN_ONSETS`]).
-const MAX_IOI_SPREAD: f64 = 0.15;
+/// A steady note's loudness moves by hundredths of a dB between frames; a
+/// struck, plucked or sung onset rises by several dB per frame. The floor sits
+/// between them, so a held note contributes no attacks at all.
+const RISE_FLOOR_DB: f64 = 1.0;
 
-/// The shortest voiced stretch a root may be read from, in seconds.
+/// How far each attack is spread in time before looking for a period, in
+/// seconds either side.
+///
+/// Nobody plays to a click. An attack is a spike one or two frames wide, and a
+/// hand-played pulse wobbles by ±20 ms — two frames — so unspread spikes on
+/// successive beats miss each other and a perfectly human 92 BPM take scored
+/// below [`MIN_PULSE_STRENGTH`]. Spreading each attack over ±30 ms lets
+/// neighbouring beats overlap while still keeping a 180 BPM beat (333 ms)
+/// clearly separate from its neighbours.
+const ATTACK_SPREAD_SECS: f64 = 0.030;
+
+/// The slowest pulse the envelope is searched for, in BPM, before folding.
+///
+/// Half of [`MIN_BPM`]: a 40 BPM pulse repeats at no period between 60 and 180
+/// BPM — its attacks are 1.5 s apart and nothing lands in between — so it has
+/// to be found at its own period and then doubled into range.
+const SLOWEST_SEARCHED_BPM: f64 = MIN_BPM / 2.0;
+
+/// How strongly the attack envelope must repeat at its best period, as a share
+/// of its energy at zero lag, for that period to count as a pulse.
+///
+/// Three evenly spaced hits score about 2/3 and are a pulse. Two hits half a
+/// second apart and a third nine seconds later score about 1/3 — an earlier
+/// median-of-intervals design reported that as 120 BPM, because with only two
+/// intervals its spread gate could never fire.
+const MIN_PULSE_STRENGTH: f64 = 0.4;
+
+/// The tempo a listener leans toward when a pulse could be heard at two
+/// octaves, in BPM, and how many octaves either side that lean fades over.
+///
+/// Inside [`MIN_BPM`]..=[`MAX_BPM`] some tempos have an octave that also fits
+/// (90 and 180, say). The envelope repeats at both; this breaks the tie toward
+/// the one a person is more likely to be feeling, without overruling a pulse
+/// that is clearly stronger at the other.
+const PRIOR_CENTRE_BPM: f64 = 120.0;
+const PRIOR_WIDTH_OCTAVES: f64 = 1.0;
+
+/// The shortest stretch of continuous voicing that counts as a sung note, in
+/// seconds. Shorter runs are breath, consonants, or a stray frame.
+const MIN_RUN_SECS: f64 = 0.08;
+
+/// How much sung voicing a root may be read from, in seconds, across all runs.
 const MIN_VOICED_SECS: f64 = 0.25;
-
-/// The fewest voiced frames a root may be read from.
-const MIN_VOICED_FRAMES: usize = 8;
-
-/// How solidly voiced the phrase must be **within its own span**.
-///
-/// Deliberately *not* measured against the whole take: a sung phrase with
-/// silence on either side is the most ordinary shape a recording has, and
-/// gating on the whole take rejected exactly that — a 1.5 s hum with three
-/// seconds of lead-in reported no root at all, while the same hum with two
-/// seconds reported 220 Hz. What matters is whether the voiced part is a
-/// phrase or a scattering, and that is a question about the span it covers.
-const MIN_VOICED_DENSITY: f64 = 0.5;
 
 /// What a take says about itself.
 ///
@@ -72,25 +112,21 @@ pub struct Follow {
     pub root_hz: Option<f64>,
 }
 
-/// Reads a take's tempo and pitch centre out of an analysis that already ran.
+/// Reads a take's tempo and pitch centre, given an analysis that already ran.
 ///
-/// Pure and infallible: everything it needs is in the [`Transcription`]. Prefer
-/// this when the caller has one — [`analyze`] costs hundreds of milliseconds on
-/// a few seconds of audio, and running it twice to answer two questions about
-/// one take is the kind of waste that is invisible until it is not.
+/// The pitch comes from the [`Transcription`]'s pitch track; the tempo from
+/// the signal's own loudness ([`tempo_of`]), which the transcription does not
+/// carry. Prefer this over [`follow_take`] when the caller has the analysis
+/// already — [`analyze`] costs hundreds of milliseconds on a few seconds of
+/// audio.
 ///
 /// The root is the take's **central pitch, not its tonic**. Establishing a key
-/// centre properly means weighing which pitches are structurally important,
-/// which this project does not do yet; for accompanying whoever is singing, the
-/// pitch they are singing around is the honest answer.
-pub fn follow(transcription: &Transcription) -> Follow {
-    let onsets: Vec<f64> = transcription
-        .onsets
-        .iter()
-        .map(|onset| onset.time_secs)
-        .collect();
+/// centre means weighing which pitches are structurally important, which this
+/// project does not do yet; for accompanying whoever is singing, the pitch they
+/// are singing around is the honest answer.
+pub fn follow(signal: &[f32], sample_rate: u32, transcription: &Transcription) -> Follow {
     Follow {
-        bpm: estimate_bpm(&onsets).and_then(fold_into_range),
+        bpm: tempo_of(signal, sample_rate),
         root_hz: central_pitch(&transcription.pitch_track.frames),
     }
 }
@@ -120,109 +156,182 @@ pub fn follow(transcription: &Transcription) -> Follow {
 /// # Ok::<(), gooz_dsp::DspError>(())
 /// ```
 pub fn follow_take(signal: &[f32], sample_rate: u32, cfg: &Config) -> Result<Follow, DspError> {
-    Ok(follow(&analyze(signal, sample_rate, cfg)?))
+    let transcription = analyze(signal, sample_rate, cfg)?;
+    Ok(follow(signal, sample_rate, &transcription))
 }
 
-/// Estimates tempo from onset times, or `None` when they are not a pulse.
+/// The pulse of a signal, in BPM, or `None` when it has none.
 ///
-/// `60 / median(inter-onset interval)`, refused when there are fewer than
-/// [`MIN_ONSETS`] onsets or the intervals are more uneven than
-/// [`MAX_IOI_SPREAD`].
+/// Autocorrelation of the energy-attack envelope over the periods that are
+/// [`MIN_BPM`]..=[`MAX_BPM`] apart; the strongest repeat wins, leaning toward
+/// [`PRIOR_CENTRE_BPM`] when two octaves repeat about equally, and the answer
+/// is refused when even the strongest repeat is weaker than
+/// [`MIN_PULSE_STRENGTH`]. Non-finite samples are ignored.
 ///
 /// ```
-/// use gooz_dsp::estimate_bpm;
+/// use gooz_dsp::tempo_of;
 ///
-/// // A steady half-second pulse is 120 BPM.
-/// assert_eq!(estimate_bpm(&[0.0, 0.5, 1.0, 1.5]), Some(120.0));
-/// // Two onsets are a gap, not a tempo.
-/// assert_eq!(estimate_bpm(&[0.0, 9.0]), None);
-/// // A long-short feel is one grid of 0.4 s, which is a real pulse.
-/// let felt = estimate_bpm(&[0.0, 0.4, 1.2, 1.6, 2.4, 2.8]).unwrap();
-/// assert!((felt - 150.0).abs() < 1e-9);
-/// // Free time is not.
-/// assert_eq!(estimate_bpm(&[0.0, 1.211, 1.68, 2.699, 3.019, 4.838]), None);
+/// let sr = 16_000;
+/// // A click every half second: 120 BPM.
+/// let mut clicks = vec![0.0f32; 4 * sr as usize];
+/// for beat in 0..8 {
+///     for i in 0..80 { clicks[beat * sr as usize / 2 + i] = 0.8; }
+/// }
+/// let bpm = tempo_of(&clicks, sr).expect("a steady pulse");
+/// assert!((bpm - 120.0).abs() < 2.0);
+///
+/// // One held note: loud, but nothing that repeats.
+/// let held: Vec<f32> = (0..3 * sr as usize)
+///     .map(|i| (0.8 * (std::f64::consts::TAU * 220.0 * i as f64 / 16_000.0).sin()) as f32)
+///     .collect();
+/// assert_eq!(tempo_of(&held, sr), None);
 /// ```
-pub fn estimate_bpm(onset_times: &[f64]) -> Option<f64> {
-    if onset_times.len() < MIN_ONSETS {
+pub fn tempo_of(signal: &[f32], sample_rate: u32) -> Option<f64> {
+    if sample_rate == 0 {
         return None;
     }
-    let iois: Vec<f64> = onset_times.windows(2).map(|w| w[1] - w[0]).collect();
-    let median = median_of(iois.clone())?;
-    if median <= 0.0 {
-        return None;
-    }
-    let deviations: Vec<f64> = iois.iter().map(|ioi| (ioi - median).abs()).collect();
-    let spread = median_of(deviations)? / median;
-    if spread > MAX_IOI_SPREAD {
-        return None;
-    }
-    let bpm = 60.0 / median;
-    bpm.is_finite().then_some(bpm)
+    let attacks = spread(&attack_envelope(signal, sample_rate));
+    strongest_pulse(&attacks, 1.0 / FRAME_STEP_SECS)
 }
 
-/// Folds a raw estimate into the musical range by octaves, or gives up.
-///
-/// A median inter-onset interval routinely lands on half or double the felt
-/// pulse — a listener hearing 150 and a detector reporting 300 are agreeing.
-fn fold_into_range(bpm: f64) -> Option<f64> {
-    if !bpm.is_finite() || bpm <= 0.0 {
+/// Each attack smeared over ±[`ATTACK_SPREAD_SECS`] with a triangular kernel,
+/// so a beat played a little early still lines up with one played a little
+/// late.
+fn spread(attacks: &[f64]) -> Vec<f64> {
+    let reach = (ATTACK_SPREAD_SECS / FRAME_STEP_SECS).round() as usize;
+    (0..attacks.len())
+        .map(|i| {
+            let from = i.saturating_sub(reach);
+            let to = (i + reach).min(attacks.len().saturating_sub(1));
+            (from..=to)
+                .map(|j| attacks[j] * (1.0 - i.abs_diff(j) as f64 / (reach + 1) as f64))
+                .sum()
+        })
+        .collect()
+}
+
+/// How much louder each frame is than the last, past the ripple floor: the
+/// energy attacks of the signal, one value per [`FRAME_STEP_SECS`].
+fn attack_envelope(signal: &[f32], sample_rate: u32) -> Vec<f64> {
+    let rate = f64::from(sample_rate);
+    let step = ((FRAME_STEP_SECS * rate).round() as usize).max(1);
+    let window = ((FRAME_WINDOW_SECS * rate).round() as usize).max(1);
+    if signal.len() < window {
+        return Vec::new();
+    }
+    let loudness: Vec<f64> = (0..=(signal.len() - window) / step)
+        .map(|frame| {
+            let slice = &signal[frame * step..frame * step + window];
+            let energy = slice
+                .iter()
+                .filter(|s| s.is_finite())
+                .map(|&s| f64::from(s) * f64::from(s))
+                .sum::<f64>()
+                / window as f64;
+            (10.0 * energy.max(f64::MIN_POSITIVE).log10()).max(SILENCE_DB)
+        })
+        .collect();
+    let mut attacks = vec![0.0; loudness.len()];
+    for (i, pair) in loudness.windows(2).enumerate() {
+        attacks[i + 1] = (pair[1] - pair[0] - RISE_FLOOR_DB).max(0.0);
+    }
+    attacks
+}
+
+/// The period at which `attacks` best repeats, as BPM, or `None` when no
+/// period repeats strongly enough to be a pulse.
+fn strongest_pulse(attacks: &[f64], frames_per_sec: f64) -> Option<f64> {
+    let energy: f64 = attacks.iter().map(|a| a * a).sum();
+    if !energy.is_finite() || energy <= 0.0 {
         return None;
     }
-    let mut folded = bpm;
-    for _ in 0..=MAX_FOLDS {
-        if folded < MIN_BPM {
-            folded *= 2.0;
-        } else if folded > MAX_BPM {
-            folded /= 2.0;
+    let shortest = (frames_per_sec * 60.0 / MAX_BPM).ceil() as usize;
+    let longest = ((frames_per_sec * 60.0 / SLOWEST_SEARCHED_BPM).floor() as usize)
+        .min(attacks.len().saturating_sub(1));
+    if shortest < 1 || shortest > longest {
+        return None;
+    }
+    let repeat = |lag: usize| -> f64 {
+        attacks
+            .iter()
+            .zip(&attacks[lag..])
+            .map(|(a, b)| a * b)
+            .sum::<f64>()
+            / energy
+    };
+    let bpm_at = |lag: f64| 60.0 * frames_per_sec / lag;
+    let lean = |lag: usize| {
+        let octaves = (bpm_at(lag as f64) / PRIOR_CENTRE_BPM).log2() / PRIOR_WIDTH_OCTAVES;
+        (-0.5 * octaves * octaves).exp()
+    };
+    let best = (shortest..=longest)
+        .max_by(|&a, &b| (repeat(a) * lean(a)).total_cmp(&(repeat(b) * lean(b))))?;
+    if repeat(best) < MIN_PULSE_STRENGTH {
+        return None;
+    }
+    // Refine between frames: the peak of the parabola through the best lag and
+    // its neighbours, so the answer is not quantized to whole 10 ms steps.
+    let refined = if best > shortest && best < longest {
+        let (before, here, after) = (repeat(best - 1), repeat(best), repeat(best + 1));
+        let curvature = before - 2.0 * here + after;
+        if curvature < 0.0 {
+            best as f64 + 0.5 * (before - after) / curvature
         } else {
-            return Some(folded);
+            best as f64
+        }
+    } else {
+        best as f64
+    };
+    // A pulse found below the range is felt at double time: one fold, never
+    // more — the search does not go low enough for a second one to be needed.
+    let found = bpm_at(refined);
+    let bpm = if found < MIN_BPM { found * 2.0 } else { found };
+    bpm.is_finite().then(|| bpm.clamp(MIN_BPM, MAX_BPM))
+}
+
+/// The pitch a take sits around: the median pitch of its sung notes, or `None`
+/// when too little of it was sung to mean anything.
+///
+/// Voicing is read in **runs** — stretches of continuous voiced frames — and
+/// runs shorter than [`MIN_RUN_SECS`] are set aside as breath, consonants or a
+/// stray frame. What matters is whether there are sung notes, not how much of
+/// the take they fill: an earlier gate measured voicing against the span it
+/// covered and refused detached notes, and two phrases with a breath between
+/// them, both of which are ordinary singing.
+fn central_pitch(frames: &[PitchFrame]) -> Option<f64> {
+    let step = match frames {
+        [first, second, ..] => second.time_secs - first.time_secs,
+        _ => return None,
+    };
+    if !step.is_finite() || step <= 0.0 {
+        return None;
+    }
+    let voiced = |frame: &PitchFrame| frame.f0_hz.is_some_and(|hz| hz.is_finite() && hz > 0.0);
+    let mut sung: Vec<f64> = Vec::new();
+    let mut run: Vec<f64> = Vec::new();
+    for frame in frames.iter().chain(std::iter::once(&PitchFrame {
+        time_secs: f64::INFINITY,
+        f0_hz: None,
+        confidence: 0.0,
+    })) {
+        if voiced(frame) {
+            run.extend(frame.f0_hz.map(f64::from));
+        } else {
+            if run.len() as f64 * step >= MIN_RUN_SECS {
+                sung.append(&mut run);
+            }
+            run.clear();
         }
     }
-    None
+    if (sung.len() as f64) * step < MIN_VOICED_SECS {
+        return None;
+    }
+    median_of(sung)
 }
 
-/// The pitch a take sits around: the median of its voiced frames, or `None`
-/// when too little of the take was voiced to mean anything.
-fn central_pitch(frames: &[PitchFrame]) -> Option<f64> {
-    let voiced: Vec<&PitchFrame> = frames
-        .iter()
-        .filter(|frame| frame.f0_hz.is_some_and(|hz| hz.is_finite() && hz > 0.0))
-        .collect();
-    if voiced.len() < MIN_VOICED_FRAMES {
-        return None;
-    }
-    let first = voiced.first()?.time_secs;
-    let last = voiced.last()?.time_secs;
-    if !(last - first).is_finite() || last - first < MIN_VOICED_SECS {
-        return None;
-    }
-    let inside_span = frames
-        .iter()
-        .filter(|frame| (first..=last).contains(&frame.time_secs))
-        .count();
-    if (voiced.len() as f64) < MIN_VOICED_DENSITY * inside_span as f64 {
-        return None;
-    }
-    median_of(
-        voiced
-            .iter()
-            .filter_map(|frame| frame.f0_hz)
-            .map(f64::from)
-            .collect(),
-    )
-}
-
-/// The middle value, by order statistic.
-///
-/// Never the average of the two middle values: that invents a number the take
-/// never contained — a long-short feel of `0.4 s` and `0.8 s` averaged to
-/// `0.6 s`, a pulse matching neither the long notes nor the short ones.
-///
-/// Even counts take the **lower** middle, so the answer does not flip with the
-/// number of onsets. On a 50/50 long-short pattern the upper middle picks the
-/// long value for an even count and the short one for an odd count, which made
-/// the same rhythm report 150 BPM or nothing depending on how many notes were
-/// played.
+/// The middle value, by order statistic — never the average of the two middle
+/// values, which invents a number the take never contained. Even counts take
+/// the lower middle.
 fn median_of(mut values: Vec<f64>) -> Option<f64> {
     if values.is_empty() {
         return None;
@@ -235,6 +344,8 @@ fn median_of(mut values: Vec<f64>) -> Option<f64> {
 mod tests {
     use super::*;
 
+    const SR: u32 = 16_000;
+
     fn frame(time_secs: f64, hz: Option<f32>) -> PitchFrame {
         PitchFrame {
             time_secs,
@@ -243,129 +354,150 @@ mod tests {
         }
     }
 
-    #[test]
-    fn a_steady_pulse_is_a_tempo() {
-        assert_eq!(estimate_bpm(&[0.0, 0.5, 1.0, 1.5]), Some(120.0));
-        assert_eq!(estimate_bpm(&[0.0, 0.25, 0.5, 0.75, 1.0]), Some(240.0));
-    }
-
-    #[test]
-    fn what_is_not_a_pulse_reports_nothing() {
-        // Each of these produced a confident, wrong number before the gates.
-        assert_eq!(estimate_bpm(&[]), None);
-        assert_eq!(estimate_bpm(&[0.3]), None);
-        assert_eq!(estimate_bpm(&[0.0, 9.29]), None, "one gap is not a tempo");
-        assert_eq!(
-            estimate_bpm(&[0.0, 1.211, 1.68, 2.699, 3.019, 4.838]),
-            None,
-            "free time is not a tempo"
-        );
-        assert_eq!(estimate_bpm(&[0.5, 0.5, 0.5]), None, "no interval at all");
-    }
-
-    #[test]
-    fn folding_never_reports_an_unmusical_tempo() {
-        let mut raw = vec![
-            0.0,
-            -1.0,
-            f64::NAN,
-            f64::INFINITY,
-            f64::NEG_INFINITY,
-            f64::MIN_POSITIVE,
-            f64::MAX,
-            1e-300,
-            1e300,
-        ];
-        let mut bpm = 0.01;
-        while bpm < 100_000.0 {
-            raw.push(bpm);
-            bpm *= 1.07;
+    /// Short decaying bursts at the given times, in seconds.
+    fn hits_at(times: &[f64], total_secs: f64) -> Vec<f32> {
+        let mut out = vec![0.0f32; (total_secs * f64::from(SR)) as usize];
+        for &t in times {
+            let start = (t * f64::from(SR)) as usize;
+            for i in 0..1_600 {
+                if start + i < out.len() {
+                    let tone = (std::f64::consts::TAU * 330.0 * i as f64 / f64::from(SR)).sin();
+                    out[start + i] += (0.8 * (-(i as f64) / 300.0).exp() * tone) as f32;
+                }
+            }
         }
-        for value in raw {
-            if let Some(folded) = fold_into_range(value) {
+        out
+    }
+
+    #[test]
+    fn a_steady_pulse_is_found_between_frames_not_quantized_to_them() {
+        // 131 BPM is 45.8 frames per beat; a whole-frame answer would be 130.4
+        // or 133.3. The parabola between frames should land close to 131.
+        let times: Vec<f64> = (0..12).map(|b| 0.1 + b as f64 * 60.0 / 131.0).collect();
+        let bpm = tempo_of(&hits_at(&times, 6.0), SR).expect("a pulse");
+        // Tight on purpose: whole frames give 130.43, which a ±1.5 tolerance
+        // accepted — so removing the refinement survived an earlier version.
+        assert!((bpm - 131.0).abs() < 0.3, "measured {bpm:.2}");
+    }
+
+    #[test]
+    fn a_long_short_swing_follows_the_beat_not_its_halves() {
+        // 2:1 swung eighths at 100 BPM: hits at 0 and 2/3 of every beat. The
+        // median-of-intervals design reported 90.7 or 175.8 depending on how
+        // many notes there were.
+        let beat = 60.0 / 100.0;
+        let times: Vec<f64> = (0..10)
+            .flat_map(|b| [b as f64 * beat, (b as f64 + 2.0 / 3.0) * beat])
+            .map(|t| t + 0.1)
+            .collect();
+        let bpm = tempo_of(&hits_at(&times, 7.0), SR).expect("swing has a pulse");
+        assert!((bpm - 100.0).abs() < 3.0, "swing measured {bpm:.2}");
+    }
+
+    #[test]
+    fn a_pulse_slower_than_the_range_is_doubled_not_clamped() {
+        // 40 BPM repeats at no period inside 60..=180; it is found at its own
+        // and folded to 80. Clamped instead, it would report 60 — a tempo that
+        // is not an octave of anything that was played.
+        let times: Vec<f64> = (0..8).map(|b| 0.1 + b as f64 * 1.5).collect();
+        let bpm = tempo_of(&hits_at(&times, 13.0), SR).expect("a slow pulse");
+        assert!((bpm - 80.0).abs() < 1.0, "40 BPM reported as {bpm:.2}");
+    }
+
+    #[test]
+    fn a_pulse_after_digital_silence_is_not_drowned_by_its_first_note() {
+        // Sung notes that ring into each other, after a second of exact zeros.
+        // Each note rises only out of the last one's tail; the first rises out
+        // of nothing. Unfloored, "nothing" is −3000 dB and that one rise holds
+        // almost all of the envelope's energy, so no period can repeat against
+        // it and the pulse is refused.
+        let beat = 0.5;
+        let mut take = vec![0.0f32; SR as usize];
+        for n in 0..10 {
+            for i in 0..(beat * f64::from(SR)) as usize {
+                let t = i as f64 / f64::from(SR);
+                let decay = (-8.0 * t / beat).exp(); // about −35 dB by the next note
+                let tone = (std::f64::consts::TAU * 262.0 * (n as f64 * beat + t)).sin();
+                take.push((0.7 * decay * tone) as f32);
+            }
+        }
+        let bpm = tempo_of(&take, SR).expect("ten sung notes on a pulse");
+        assert!((bpm - 120.0).abs() < 2.0, "measured {bpm:.2}");
+    }
+
+    #[test]
+    fn two_close_hits_and_a_distant_one_are_not_a_pulse() {
+        assert_eq!(tempo_of(&hits_at(&[0.1, 0.6, 9.1], 10.0), SR), None);
+    }
+
+    #[test]
+    fn silence_and_noise_have_no_pulse() {
+        assert_eq!(tempo_of(&vec![0.0; 3 * SR as usize], SR), None);
+        assert_eq!(tempo_of(&[], SR), None);
+        assert_eq!(tempo_of(&[0.5; 10], SR), None, "shorter than one window");
+        assert_eq!(tempo_of(&hits_at(&[0.1, 0.6, 1.1], 2.0), 0), None);
+    }
+
+    #[test]
+    fn a_reported_tempo_is_always_in_the_musical_range() {
+        for bpm in [40.0, 55.0, 61.0, 95.0, 119.0, 150.0, 179.0, 200.0, 260.0] {
+            let times: Vec<f64> = (0..16).map(|b| 0.1 + b as f64 * 60.0 / bpm).collect();
+            let total = times.last().copied().unwrap_or(0.0) + 1.0;
+            if let Some(found) = tempo_of(&hits_at(&times, total), SR) {
                 assert!(
-                    (MIN_BPM..=MAX_BPM).contains(&folded),
-                    "{value} folded to {folded}, outside the musical range"
+                    (MIN_BPM..=MAX_BPM).contains(&found),
+                    "{bpm} BPM reported as {found:.1}"
                 );
             }
         }
     }
 
     #[test]
-    fn folding_moves_by_whole_octaves_or_not_at_all() {
-        for (raw, expected) in [(300.0, 150.0), (40.0, 80.0), (120.0, 120.0), (20.0, 80.0)] {
-            assert_eq!(fold_into_range(raw), Some(expected), "{raw} BPM");
+    fn detached_notes_and_two_phrases_still_have_a_root() {
+        // Eight 0.2 s notes, each followed by 0.3 s of rest: 40% voiced.
+        let mut detached = Vec::new();
+        for note in 0..8 {
+            for i in 0..50 {
+                let t = note as f64 * 0.5 + i as f64 * 0.01;
+                detached.push(frame(t, (i < 20).then_some(260.0)));
+            }
         }
-        // Two folds is the limit: past that the answer means nothing.
-        assert_eq!(fold_into_range(1e300), None);
-        assert_eq!(fold_into_range(1e-300), None);
-        assert_eq!(fold_into_range(2000.0), None);
-    }
+        assert_eq!(central_pitch(&detached), Some(260.0));
 
-    #[test]
-    fn a_phrase_padded_with_silence_still_has_a_root() {
-        // The whole-take fraction gate rejected exactly this — the most
-        // ordinary shape a real recording has.
-        let mut frames: Vec<PitchFrame> = (0..200).map(|i| frame(i as f64 * 0.01, None)).collect();
-        frames.extend((0..120).map(|i| frame(2.0 + i as f64 * 0.01, Some(220.0))));
-        frames.extend((0..200).map(|i| frame(3.2 + i as f64 * 0.01, None)));
-        assert_eq!(central_pitch(&frames), Some(220.0));
-    }
-
-    #[test]
-    fn a_scattering_of_voiced_frames_is_not_a_phrase() {
-        // Voiced frames spread thinly across their own span: no phrase, no root.
-        let frames: Vec<PitchFrame> = (0..300)
-            .map(|i| frame(i as f64 * 0.01, (i % 10 == 0).then_some(220.0)))
-            .collect();
-        assert_eq!(central_pitch(&frames), None);
-    }
-
-    #[test]
-    fn a_root_needs_enough_voiced_frames_over_enough_time() {
-        let few: Vec<PitchFrame> = (0..3)
+        // 0.8 s sung, a 2 s breath, 0.7 s sung.
+        let mut phrases: Vec<PitchFrame> = (0..80)
             .map(|i| frame(i as f64 * 0.01, Some(220.0)))
             .collect();
-        assert_eq!(central_pitch(&few), None, "three frames is not a phrase");
-
-        let brief: Vec<PitchFrame> = (0..20)
-            .map(|i| frame(i as f64 * 0.001, Some(220.0)))
-            .collect();
-        assert_eq!(central_pitch(&brief), None, "20 ms is not a phrase");
+        phrases.extend((80..280).map(|i| frame(i as f64 * 0.01, None)));
+        phrases.extend((280..350).map(|i| frame(i as f64 * 0.01, Some(220.0))));
+        assert_eq!(central_pitch(&phrases), Some(220.0));
     }
 
     #[test]
-    fn a_non_finite_frame_cannot_become_the_answer() {
-        let frames: Vec<PitchFrame> = (0..40)
-            .map(|i| {
-                frame(
-                    i as f64 * 0.01,
-                    Some(if i % 4 == 0 { f32::NAN } else { 220.0 }),
-                )
-            })
+    fn a_scattering_of_single_voiced_frames_is_not_singing() {
+        let scattered: Vec<PitchFrame> = (0..400)
+            .map(|i| frame(i as f64 * 0.01, (i % 7 == 0).then_some(220.0)))
             .collect();
+        assert_eq!(central_pitch(&scattered), None);
+    }
+
+    #[test]
+    fn a_non_finite_frame_cannot_become_the_root() {
+        // 0.4 s sung at 220 Hz, then 0.5 s of frames reporting +inf. Counted as
+        // voice, the infinite frames would be the majority and the lower-middle
+        // median would *be* infinity. (NaN would not show this: `NaN > 0.0` is
+        // already false, and a median shrugs off a minority of outliers.)
+        let mut frames: Vec<PitchFrame> = (0..40)
+            .map(|i| frame(i as f64 * 0.01, Some(220.0)))
+            .collect();
+        frames.extend((40..90).map(|i| frame(i as f64 * 0.01, Some(f32::INFINITY))));
         assert_eq!(central_pitch(&frames), Some(220.0));
     }
 
     #[test]
     fn the_median_is_an_order_statistic_not_an_average() {
-        // The average of 0.4 and 0.8 is a value the take never contained.
         assert_eq!(median_of(vec![0.4, 0.8]), Some(0.4));
         assert_eq!(median_of(vec![3.0, 1.0, 2.0]), Some(2.0));
         assert_eq!(median_of(Vec::new()), None);
-    }
-
-    #[test]
-    fn a_long_short_feel_reports_its_grid_however_many_notes_were_played() {
-        // 0.4 s and 0.8 s are one grid of 0.4 s. Taking the *upper* middle made
-        // the same rhythm answer 150 BPM or nothing depending on the note count.
-        let short = estimate_bpm(&[0.0, 0.4, 1.2, 1.6, 2.4, 2.8]).expect("a grid");
-        let long =
-            estimate_bpm(&[0.0, 0.4, 1.2, 1.6, 2.4, 2.8, 3.6, 4.0, 4.8]).expect("the same grid");
-        assert!((short - 150.0).abs() < 1e-9, "{short}");
-        assert!(
-            (short - long).abs() < 1e-9,
-            "the answer moved with the number of onsets: {short} vs {long}"
-        );
     }
 }

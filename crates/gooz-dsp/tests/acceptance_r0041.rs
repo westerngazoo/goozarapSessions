@@ -5,7 +5,7 @@
 //! against what the code happens to compute.
 
 use gooz_dsp::{
-    Config, DspError, Follow, PitchFrame, PitchTrack, Transcription, estimate_bpm, follow_take,
+    Config, DspError, Follow, PitchFrame, PitchTrack, Transcription, follow_take, tempo_of,
 };
 
 /// 16 kHz, not 48: every signal here is synthesized, the analysis defaults
@@ -330,30 +330,32 @@ fn ac1_a_long_breath_between_two_phrases_is_not_free_time() {
 }
 
 #[test]
-fn ac3_onsets_running_backwards_are_not_a_tempo() {
-    // `estimate_bpm` is public and takes any slice. Descending times make every
-    // interval negative; without the `median <= 0` guard this reported
-    // Some(-60.0) — `follow` would still fold it away, but the public function
-    // would not (mutation-tested on 39a9257: removing the guard left every test
-    // green).
-    assert_eq!(estimate_bpm(&[3.0, 2.0, 1.0, 0.0]), None);
-    assert_eq!(estimate_bpm(&[0.0, 0.0, 0.0, 0.0]), None);
-}
-
-#[test]
-fn ac5_estimate_bpm_never_answers_with_a_non_finite_tempo() {
-    // SPEC-0041 names this as a bug the move fixed: a denormal interval made
-    // the old estimator return `inf`. Mutation-tested on 39a9257: dropping the
-    // finiteness check left every test green, because `follow` folds an
-    // infinity away — but `estimate_bpm` is public on its own.
-    for onsets in [
-        vec![0.0, f64::MIN_POSITIVE, 2.0 * f64::MIN_POSITIVE],
-        vec![0.0, 5e-324, 1e-323, 1.5e-323],
-        vec![0.0, f64::NAN, 1.0, 1.5],
-        vec![f64::NAN; 4],
-    ] {
-        let bpm = estimate_bpm(&onsets);
-        assert!(bpm.is_none_or(f64::is_finite), "{onsets:?} gave {bpm:?}");
+fn ac5_tempo_of_never_answers_with_a_non_finite_or_unmusical_tempo() {
+    // `tempo_of` is public and takes any slice at any rate. The interval-based
+    // estimator it replaced returned `inf` for a denormal interval and -60 for
+    // onsets running backwards; this one reads loudness, so the hostile inputs
+    // are signals and rates rather than onset lists.
+    let mut garbage = clicks(120.0, 8);
+    for (i, s) in garbage.iter_mut().enumerate().step_by(97) {
+        *s = if i % 2 == 0 { f32::NAN } else { f32::INFINITY };
+    }
+    let takes: [Vec<f32>; 5] = [
+        garbage,
+        vec![f32::MAX; 8_000],
+        vec![f32::MIN_POSITIVE; 8_000],
+        vec![1.0e-38; 8_000],
+        (0..8_000)
+            .map(|i| if i % 2 == 0 { 1.0 } else { -1.0 })
+            .collect(),
+    ];
+    for take in &takes {
+        for rate in [1u32, 2, 100, 8_000, SR, 192_000, u32::MAX] {
+            let bpm = tempo_of(take, rate);
+            assert!(
+                bpm.is_none_or(|b| b.is_finite() && (60.0..=180.0).contains(&b)),
+                "rate {rate} gave {bpm:?}"
+            );
+        }
     }
 }
 
@@ -391,7 +393,7 @@ fn ac5_a_non_finite_pitch_frame_cannot_become_the_root() {
             f0_hz: Some(f32::NAN),
             confidence: 0.9,
         }));
-    assert_eq!(gooz_dsp::follow(&heard).root_hz, Some(220.0));
+    assert_eq!(gooz_dsp::follow(&[], SR, &heard).root_hz, Some(220.0));
 
     // Nor do frames with no finite time span a phrase (removing that guard
     // survived too).
@@ -401,7 +403,7 @@ fn ac5_a_non_finite_pitch_frame_cannot_become_the_root() {
             frame.time_secs = when;
         }
         assert_eq!(
-            gooz_dsp::follow(&heard).root_hz,
+            gooz_dsp::follow(&[], SR, &heard).root_hz,
             None,
             "frames at t = {when}"
         );
@@ -409,17 +411,40 @@ fn ac5_a_non_finite_pitch_frame_cannot_become_the_root() {
 }
 
 #[test]
-fn ac3_a_handful_of_voiced_frames_is_not_a_phrase_however_long_it_spans() {
-    // Seven solidly voiced frames over 0.3 s clear the duration gate and the
-    // density gate, so only MIN_VOICED_FRAMES (8, SPEC-0041) can refuse them.
-    // At the default hop and 16 kHz or above, frames sit too close together
-    // for a real take to reach this case, so without a constructed one,
-    // deleting the gate changed no test outcome (mutation-tested on 39a9257).
-    assert_eq!(gooz_dsp::follow(&voiced_frames(7, 0.05)).root_hz, None);
+fn ac3_too_little_singing_is_not_a_key() {
+    // Sung voicing is read in runs, and the runs must add up to a quarter of a
+    // second. Both edges, so moving the threshold either way fails.
     assert_eq!(
-        gooz_dsp::follow(&voiced_frames(8, 0.05)).root_hz,
+        gooz_dsp::follow(&[], SR, &voiced_frames(24, 0.01)).root_hz,
+        None
+    );
+    assert_eq!(
+        gooz_dsp::follow(&[], SR, &voiced_frames(26, 0.01)).root_hz,
         Some(220.0)
     );
+}
+
+#[test]
+fn ac3_a_run_too_short_to_be_a_note_is_not_counted() {
+    // Plenty of voicing in total, but in 50 ms runs — breath, consonants,
+    // stray frames. None of them is long enough to be a sung note.
+    let mut frames = Vec::new();
+    for run in 0..20 {
+        for i in 0..10 {
+            let t = run as f64 * 0.2 + i as f64 * 0.01;
+            frames.push(PitchFrame {
+                time_secs: t,
+                f0_hz: (i < 5).then_some(220.0),
+                confidence: 0.9,
+            });
+        }
+    }
+    let heard = Transcription {
+        pitch_track: PitchTrack { frames },
+        onsets: Vec::new(),
+        notes: Vec::new(),
+    };
+    assert_eq!(gooz_dsp::follow(&[], SR, &heard).root_hz, None);
 }
 
 /// Adds a clean sung note — a sine with a 20 ms attack and a 30 ms release —
@@ -440,7 +465,6 @@ fn sing(take: &mut [f32], sr: u32, start: f64, secs: f64, hz: f64) {
 }
 
 #[test]
-#[ignore = "QA R-0041 finding (owner decision): pitched takes with gaps inside them report no key"]
 fn ac2_a_pitched_take_with_gaps_inside_it_still_has_a_key() {
     // MIN_VOICED_DENSITY is measured inside the voiced span so that silence
     // *around* a phrase stops costing the take its key. Silence *inside* the
@@ -483,7 +507,6 @@ fn ac2_a_pitched_take_with_gaps_inside_it_still_has_a_key() {
 }
 
 #[test]
-#[ignore = "QA R-0041 FAIL (AC3): a held note sung with vibrato reports a tempo (165.4 BPM)"]
 fn ac3_a_held_note_sung_with_vibrato_has_no_tempo() {
     // One note held for three seconds, with the vibrato any singer puts on a
     // held note. The onset detector fires on every half-cycle of the wobble,
@@ -497,7 +520,6 @@ fn ac3_a_held_note_sung_with_vibrato_has_no_tempo() {
 }
 
 #[test]
-#[ignore = "QA R-0041 FAIL (AC3): a plain held hum at 44.1/48 kHz reports a tempo (122-152 BPM)"]
 fn ac3_a_held_hum_at_a_microphones_sample_rate_has_no_tempo() {
     // No vibrato at all: a steady hum at the rates a microphone delivers.
     // `ac3_the_two_answers_are_independent` passes because its held note is a
@@ -521,7 +543,6 @@ fn ac3_a_held_hum_at_a_microphones_sample_rate_has_no_tempo() {
 }
 
 #[test]
-#[ignore = "QA R-0041 FAIL (AC3): three notes in free time report a tempo"]
 fn ac3_three_notes_in_free_time_are_not_a_pulse() {
     // With exactly MIN_ONSETS onsets there are two intervals, and the lower
     // middle of two deviations from their own lower middle is always zero, so
@@ -530,8 +551,14 @@ fn ac3_three_notes_in_free_time_are_not_a_pulse() {
     //   estimate_bpm([0.0, 0.5, 9.0]) -> Some(120.0)
     //   estimate_bpm([0.0, 2.8, 9.0]) -> Some(21.4), which `follow` folds to 85.7
     //   plucks at 0.2 s, 3.0 s, 9.2 s -> Some(85.7) BPM
-    assert_eq!(estimate_bpm(&[0.0, 0.5, 9.0]), None);
-    assert_eq!(estimate_bpm(&[0.0, 2.8, 9.0]), None);
+    for times in [[0.2, 0.7, 9.2], [0.2, 3.0, 9.2]] {
+        let scattered = plucks(&times, 220.0, 10.0);
+        assert_eq!(
+            follow(&scattered).bpm,
+            None,
+            "three notes at {times:?} reported a tempo"
+        );
+    }
     let scattered = plucks(&[0.2, 3.0, 9.2], 220.0, 10.0);
     assert_eq!(
         follow(&scattered).bpm,

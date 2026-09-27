@@ -9,7 +9,9 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
-use gooz_dsp::{DspError, Follow, PitchGrid, QuantizedNote, Tempo, analyze, follow};
+use gooz_dsp::{
+    DspError, Follow, MAX_BPM, MIN_BPM, PitchGrid, QuantizedNote, Tempo, analyze, follow,
+};
 use gooz_session::{Section, SessionError, Settings, Song, Stem, StemKind, StemPlacement};
 
 use crate::{
@@ -139,7 +141,7 @@ pub fn riff_from_take(samples: &[f32], sample_rate: u32, tense: u8) -> Result<Ri
     // is the expensive half of this pipeline by a wide margin, and answering
     // two questions about one take should not cost two passes over it.
     let transcription = analyze(samples, sample_rate, &cfg.analyze)?;
-    let heard = follow(&transcription);
+    let heard = follow(samples, sample_rate, &transcription);
     let outcome = riff_from_transcription(
         transcription,
         sample_rate,
@@ -183,8 +185,18 @@ fn followed_grid(tense: u8, heard: &Follow) -> PitchGrid {
 }
 
 /// Easy Mode's clock, at the take's tempo when the take said.
+///
+/// Only a tempo inside [`MIN_BPM`]..=[`MAX_BPM`] counts as followed. `follow`
+/// never reports anything else, but [`beat_view`] takes its `bpm` from the
+/// webview, and a number from there is not a followed tempo until it is shown
+/// to be one: `1e-300` overflowed the beat builder into a panic, and `1e9`
+/// rendered a two-sample "beat".
 fn followed_tempo(heard: &Follow) -> Tempo {
-    Tempo::new(heard.bpm.unwrap_or(TEMPO_BPM), BEATS_PER_BAR).unwrap_or_else(|_| easy_mode_tempo())
+    let bpm = heard
+        .bpm
+        .filter(|bpm| (MIN_BPM..=MAX_BPM).contains(bpm))
+        .unwrap_or(TEMPO_BPM);
+    Tempo::new(bpm, BEATS_PER_BAR).unwrap_or_else(|_| easy_mode_tempo())
 }
 
 /// Maps the smooth↔tense slider onto the harmonic-series odd-limit: `0` → the

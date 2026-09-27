@@ -32,7 +32,8 @@ and **R-0042 cannot be built without it**.
 ## 3. Acceptance criteria
 
 - **AC1 — Tempo from the take.** A take with a steady pulse reports a BPM within
-  a small tolerance of that pulse.
+  a small tolerance of that pulse — including a hand-played one that wobbles by
+  ±20 ms, and a **swung** one, which reports the pulse of its beat.
 - **AC2 — Key from the take.** A take with a steady pitch reports a root within
   a small tolerance of that pitch, in Hz.
 - **AC3 — Silence about what was not heard.** A take with no usable pulse, or no
@@ -63,6 +64,7 @@ and **R-0042 cannot be built without it**.
   is a music-theory judgement this project does not make yet. For accompanying a
   singer, the pitch they are actually singing around is the right answer and the
   honest one. Harmony (R-0043) will need more, and that is its requirement.
+- **Swing is in scope** (owner decision, 2026-09-26); tempo *changes* are not.
 - **No tempo *tracking*.** One number for the whole take, not a curve. A take
   that speeds up reports one tempo.
 - **No meter detection.** Beats per bar stays 4 until R-0035 gives the engine a
@@ -91,3 +93,4 @@ None — settled in the decision log.
 
 - 2026-09-21 — created, accepted for M8.
 - 2026-09-21 — architect review round 1: AC3 and AC7 sharpened after three blocking findings.
+- 2026-09-26 — QA round 1 (FAIL): AC1 extended to swing and human timing; tempo method redesigned.

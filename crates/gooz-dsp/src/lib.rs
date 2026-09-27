@@ -39,7 +39,7 @@ mod validate;
 mod yin;
 
 pub use error::DspError;
-pub use follow::{Follow, MAX_BPM, MIN_BPM, estimate_bpm, follow, follow_take};
+pub use follow::{Follow, MAX_BPM, MIN_BPM, follow, follow_take, tempo_of};
 pub use onset::detect_onsets;
 pub use quantize::{QuantizedNote, quantize_notes};
 pub use shift::{max_output_samples, shift_pitch};
