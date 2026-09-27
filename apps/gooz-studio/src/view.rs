@@ -129,6 +129,11 @@ pub struct RiffView {
     /// constants happened to be 92, and was wrong the moment a style supplied
     /// its own tempo (R-0042).
     pub bpm: f64,
+    /// How many beats make one of the riff's bars — with [`bpm`](Self::bpm),
+    /// the clock the audio is on. A saved session writes both: writing 4 for a
+    /// described 6/8 song made the mixdown's bars two-thirds the length of the
+    /// song's and cut its drums short.
+    pub beats_per_bar: f64,
     /// What the riff is.
     pub part: Part,
 }
@@ -154,6 +159,7 @@ impl RiffView {
             followed_bpm: None,
             followed_root_hz: None,
             bpm: tempo.bpm(),
+            beats_per_bar: tempo.beats_per_bar(),
             part: Part::Guitar,
         }
     }
@@ -234,7 +240,7 @@ pub(crate) fn followed_grid(tense: u8, heard: &Follow) -> PitchGrid {
 /// webview, and a number from there is not a followed tempo until it is shown
 /// to be one: `1e-300` overflowed the beat builder into a panic, and `1e9`
 /// rendered a two-sample "beat".
-pub(crate) fn followed_tempo(heard: &Follow) -> Tempo {
+fn followed_tempo(heard: &Follow) -> Tempo {
     let bpm = heard
         .bpm
         .filter(|bpm| (MIN_BPM..=MAX_BPM).contains(bpm))
@@ -431,7 +437,7 @@ pub fn build_song(
     // 92 BPM for a riff rendered at 126 is a file that lies about itself.
     let settings = Settings {
         bpm: riff.map_or(TEMPO_BPM, |r| r.bpm),
-        beats_per_bar: BEATS_PER_BAR,
+        beats_per_bar: riff.map_or(BEATS_PER_BAR, |r| r.beats_per_bar),
         root_hz: riff
             .and_then(|r| r.followed_root_hz)
             .unwrap_or(GRID_ROOT_HZ),
@@ -442,11 +448,12 @@ pub fn build_song(
     let mut span_bars = 0u32;
 
     if let Some(r) = riff.filter(|r| !r.samples.is_empty()) {
+        let (stem_name, stem_kind) = r.part.stem();
         let idx = song.stems.len();
         song = song
             .with_stem(Stem {
-                name: r.part.stem().0.into(),
-                kind: r.part.stem().1,
+                name: stem_name.into(),
+                kind: stem_kind,
                 sample_rate: r.sample_rate,
                 bars: r.bars,
                 samples: r.samples.clone(),

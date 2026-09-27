@@ -85,3 +85,11 @@ fn qa_the_style_tempo_is_part_of_the_plan_the_ui_is_shown() {
         "the description's tempo is unchanged"
     );
 }
+
+#[test]
+fn a_plan_saved_before_styles_had_a_tempo_still_reads() {
+    let mut plan = serde_json::to_value(plan_sound(&parse_intent("trap"))).expect("serializes");
+    plan.as_object_mut().expect("an object").remove("styleBpm");
+    let read: gooz_model::SoundPlan = serde_json::from_value(plan).expect("an older plan reads");
+    assert_eq!(read.style_bpm, gooz_model::DEFAULT_BPM);
+}

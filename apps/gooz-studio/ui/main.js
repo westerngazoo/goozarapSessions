@@ -34,7 +34,7 @@ const STYLE_LABELS = { free: "libre" };
 const MODES = {
   hum: {
     prompt: "hum something",
-    hint: "tap &amp; hum a melody — no theory, just a sound.",
+    hint: "tap &amp; hum a melody, tap again to stop — no theory, just a sound.",
     label: "hum",
     heard: "esto escuché",
     stop: "record_stop_analyze",
@@ -43,7 +43,7 @@ const MODES = {
   },
   instrument: {
     prompt: "make any sound",
-    hint: "tap &amp; hit the table, click, knock — it becomes your instrument.",
+    hint: "tap &amp; hit the table, click, knock, tap again to stop — it becomes your instrument.",
     label: "sound",
     heard: "tu instrumento",
     stop: "record_stop_instrument",
@@ -88,10 +88,24 @@ function setModesEnabled(on) {
 }
 
 // ---- style chips: one per preset, asked from the engine ----
-async function loadStyles() {
+// One request for the style list, shared by every mode switch that asks —
+// toggling twice before it answers must not add the chips twice — and
+// forgotten if it fails, so the next switch tries again.
+let stylesRequest = null;
+function loadStyles() {
+  if (stylesRequest) return stylesRequest;
+  stylesRequest = (invoke ? invoke("styles") : Promise.resolve(PREVIEW_STYLES))
+    .then(renderStyles)
+    .catch((err) => {
+      stylesRequest = null;
+      showIntroMessage(`couldn't load the styles: ${err}`);
+    });
+  return stylesRequest;
+}
+
+function renderStyles(names) {
   const row = document.getElementById("styles");
-  if (row.childElementCount) return;
-  const names = invoke ? await invoke("styles") : PREVIEW_STYLES;
+  row.replaceChildren();
   for (const name of names) {
     const chip = document.createElement("button");
     chip.className = "style-chip";
@@ -193,7 +207,7 @@ async function finishRecording() {
   recording = null;
   clearTimeout(timer);
   const rec = document.getElementById("recBtn");
-  rec.querySelector(".label").textContent = "listening…";
+  rec.querySelector(".label").textContent = "working…";
   try {
     // Each stop command gets exactly its own arguments.
     const args = copy.chips ? { tense: tenseValue(), style } : { tense: tenseValue() };
@@ -217,7 +231,7 @@ async function finishRecording() {
 // A result from any mode. An accompaniment is two stems: the voice is shown and
 // played as the riff, and its styled drums become *the* beat.
 function present(result, copy) {
-  if (copy.stop === "record_stop_accompany") {
+  if (copy.chips) {
     stopBeat();
     track = result.track;
     lastBeat = track;
@@ -226,6 +240,16 @@ function present(result, copy) {
     track = null;
     showResult(result, copy.heard);
   }
+  setBeatControlsEnabled(!track);
+}
+
+// With a styled track, voice and drums are one loop started from one play
+// button at one scheduled instant. The busy slider and the beat button would
+// restart the drums alone "now", while the voice kept its place — out of step
+// on every drag. So while there is a track, they are off.
+function setBeatControlsEnabled(on) {
+  document.getElementById("busyRng").disabled = !on;
+  document.getElementById("beatBtn").disabled = !on;
 }
 
 // ---- render ----
@@ -311,7 +335,11 @@ function showResult(data, heading) {
 }
 function reset() {
   stopAudio();
-  if (track) stopBeat();
+  if (track) {
+    stopBeat();
+    track = null;
+    setBeatControlsEnabled(true);
+  }
   document.getElementById("result").classList.add("hidden");
   document.getElementById("intro").classList.remove("hidden");
 }
@@ -494,6 +522,7 @@ async function refreshBeat() {
 }
 
 async function toggleBeat() {
+  if (track) return; // the style's drums play with the voice, from play
   if (beatPlaying) return stopBeat();
   await playBeat();
 }
@@ -535,6 +564,6 @@ for (const btn of document.querySelectorAll(".mode")) {
 document.getElementById("playBtn").addEventListener("click", togglePlay);
 document.getElementById("redoBtn").addEventListener("click", reset);
 document.getElementById("beatBtn").addEventListener("click", toggleBeat);
-document.getElementById("busyRng").addEventListener("input", () => { if (beatPlaying) playBeat(); });
+document.getElementById("busyRng").addEventListener("input", () => { if (beatPlaying && !track) playBeat(); });
 document.getElementById("saveBtn").addEventListener("click", () => saveOrExport("save_session", "saved session"));
 document.getElementById("exportBtn").addEventListener("click", () => saveOrExport("export_master", "exported wav"));

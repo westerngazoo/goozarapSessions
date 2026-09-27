@@ -7,11 +7,11 @@
 //! and its tests pin: **the same sample rate, the same length, and a whole
 //! number of bars** of 4/4.
 
-use gooz_dsp::{DspError, analyze, follow, quantize_notes};
+use gooz_dsp::{DspError, analyze, first_sung_note, follow, quantize_notes};
 use gooz_model::{Meter, SoundPlan, parse_intent, plan_sound};
 use serde::Serialize;
 
-use crate::describe::{beat_from_plan, tempo_of};
+use crate::describe::{beat_from_plan, plan_tempo};
 use crate::pipeline::{PipelineConfig, bar_samples, pad_to_bars};
 use crate::view::{BeatView, NoteView, Part, RiffView, WAVE_BUCKETS, followed_grid, peak_envelope};
 
@@ -24,16 +24,6 @@ const VOICE_PEAK: f32 = 0.891_251;
 /// Fades at both ends of the take, in seconds: it starts wherever recording
 /// began and ends wherever the user tapped stop, and either cut can click.
 const EDGE_FADE_SECS: f64 = 0.005;
-
-/// How far either side of the detected onset the physical attack is looked
-/// for, in seconds.
-const ATTACK_BEFORE_SECS: f64 = 0.020;
-const ATTACK_AFTER_SECS: f64 = 0.100;
-
-/// Where a note physically starts: the first sample within this share of the
-/// note's early peak — well above a −40 dBFS room and a breath, and reached
-/// within a fraction of a cycle of any sung pitch.
-const ATTACK_FRACTION: f32 = 0.3;
 
 /// Your take, with a track in a style, at your tempo.
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -92,17 +82,17 @@ pub fn accompany_take(
 
     let cfg = PipelineConfig::default();
     let transcription = analyze(samples, sample_rate, &cfg.analyze)?;
-    let first_note = transcription.notes.first().ok_or(DspError::Silent)?;
-    let detected = (first_note.onset_secs * f64::from(sample_rate)).round() as usize;
-    let anchor = attack_start(samples, sample_rate, detected.min(samples.len()));
+    let anchor = first_sung_note(samples, sample_rate, &transcription, &cfg.analyze)
+        .ok_or(DspError::Silent)?;
     let heard = follow(samples, sample_rate, &transcription);
 
     let plan = styled_plan(style, heard.bpm);
-    let tempo = tempo_of(&plan);
+    let tempo = plan_tempo(&plan);
     let bar = bar_samples(&tempo, sample_rate);
 
-    let mut voice = count_in(anchor.min(samples.len()), bar);
-    voice.extend(level_and_fade(samples, sample_rate));
+    let entry = one_bar_in(anchor, bar);
+    let mut voice = vec![0.0; entry.pad];
+    voice.extend(level_and_fade(&samples[entry.kept_from..], sample_rate));
     let bars = pad_to_bars(&mut voice, bar);
 
     let grid = followed_grid(tense, &heard);
@@ -119,7 +109,8 @@ pub fn accompany_take(
             samples: voice,
             followed_bpm: heard.bpm,
             followed_root_hz: heard.root_hz,
-            bpm: plan.tempo_bpm,
+            bpm: tempo.bpm(),
+            beats_per_bar: tempo.beats_per_bar(),
             part: Part::Voice,
         },
         plan,
@@ -135,35 +126,28 @@ fn styled_plan(style: &str, followed_bpm: Option<f64>) -> SoundPlan {
     plan
 }
 
-/// Where the note the detector placed at `detected` physically begins.
-///
-/// The onset detector stamps a note at the start of the analysis frame that
-/// holds its attack, so it runs early by up to a frame — measured 12 ms at
-/// 48 kHz, 15 ms at 44.1 kHz, and 44 ms at the 16 kHz a headset delivers. On
-/// the downbeat that puts the singer behind the kick by the same amount, and at
-/// 44 ms it is audible. So the anchor is moved to the first sample, near the
-/// detection, that reaches [`ATTACK_FRACTION`] of the note's early peak.
-fn attack_start(take: &[f32], sample_rate: u32, detected: usize) -> usize {
-    let rate = f64::from(sample_rate);
-    let from = detected.saturating_sub((ATTACK_BEFORE_SECS * rate) as usize);
-    let to = (detected + (ATTACK_AFTER_SECS * rate) as usize).min(take.len());
-    let peak = take[detected..to]
-        .iter()
-        .fold(0.0f32, |m, s| m.max(s.abs()));
-    if peak <= 0.0 {
-        return detected;
-    }
-    take[from..to]
-        .iter()
-        .position(|s| s.abs() >= ATTACK_FRACTION * peak)
-        .map_or(detected, |offset| from + offset)
+/// How the take is re-timed so its first sung note enters on a downbeat.
+struct Entry {
+    /// Where in the take the voice begins: whole bars of lead-in before the
+    /// note's own bar are dropped.
+    kept_from: usize,
+    /// How much silence goes before it.
+    pad: usize,
 }
 
-/// The silence before the voice: enough that a note at sample `anchor` lands on
-/// the next bar line after the bar it started in.
-fn count_in(anchor: usize, bar: usize) -> Vec<f32> {
-    let entry = (anchor / bar + 1) * bar;
-    vec![0.0; entry - anchor]
+/// Exactly one bar of drums before the singer, however long they waited to
+/// start (owner decision, R-0042): whole bars of lead-in before the note's own
+/// bar are dropped — silence and room, which only ever lengthened the loop —
+/// and the rest is delayed by the remainder of a bar, so the note lands on the
+/// downbeat of bar 2. Only whole bars are dropped, so the phase is untouched.
+///
+/// `bar` is at least one sample (`bar_samples` guarantees it).
+fn one_bar_in(anchor: usize, bar: usize) -> Entry {
+    let kept_from = anchor / bar * bar;
+    Entry {
+        kept_from,
+        pad: bar - (anchor - kept_from),
+    }
 }
 
 /// The take brought to [`VOICE_PEAK`], with [`EDGE_FADE_SECS`] fades.

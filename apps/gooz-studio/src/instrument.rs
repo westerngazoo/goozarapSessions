@@ -105,6 +105,7 @@ pub fn instrument_from_take(
         followed_bpm: None,
         followed_root_hz: None,
         bpm: tempo.bpm(),
+        beats_per_bar: tempo.beats_per_bar(),
         part: Part::Instrument,
         sample_rate,
         bars,

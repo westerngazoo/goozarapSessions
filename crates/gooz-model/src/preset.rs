@@ -69,6 +69,10 @@ pub struct SoundPlan {
     /// intent's tempo stays what a description asked for, and a caller with no
     /// tempo of its own — a take with no pulse, sung over a style — reaches for
     /// this one.
+    ///
+    /// Defaults to [`DEFAULT_BPM`](crate::DEFAULT_BPM) when absent, so a plan
+    /// serialized before this field existed still reads.
+    #[serde(default = "default_style_bpm")]
     pub style_bpm: f64,
 }
 
@@ -201,6 +205,10 @@ const PRESETS: &[Preset] = &[
         },
     },
 ];
+
+fn default_style_bpm() -> f64 {
+    crate::intent::DEFAULT_BPM
+}
 
 /// The styles the preset table offers, in priority order, `"free"` last.
 ///

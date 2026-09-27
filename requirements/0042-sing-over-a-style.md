@@ -32,9 +32,10 @@ things next to each other.
   style, the rendered track's bar length matches the take's tempo, not the
   style's default and not a tempo written in the style text.
 - **AC2 — The singer enters on a downbeat.** The take's first sung note lands
-  on the downbeat of the bar after the one it started in, after at least one
-  bar of drums — a count-in. Matching the tempo but not the phase puts the
-  singer up to a beat off the drums, which sounds wrong at any BPM.
+  on the downbeat of bar 2, after **exactly one** bar of drums — a count-in —
+  however long the singer waited after tapping. Matching the tempo but not the
+  phase puts the singer up to a beat off the drums, which sounds wrong at any
+  BPM.
 - **AC3 — The style is audible.** Different styles produce different tracks from
   the same take: the drum patterns are the chosen preset's, not a generic beat.
 - **AC4 — A take with no pulse still gets a track.** When the take says nothing
@@ -82,6 +83,7 @@ None — settled in the decision log.
 |------|----------|-----------|
 | 2026-09-26 | **The voice wins on tempo.** The style's tempo is used only when the take has no pulse | It is the whole point of R-0041. Someone who sings at 120 and asks for "trap a 140" wants a trap track they can sing over, and a track they cannot keep up with is not that. |
 | 2026-09-27 | **The first sung note enters on a downbeat after a bar of drums — the voice is delayed, not trimmed** (owner decision) | Supersedes the 2026-09-26 trim. `StemPlacement` places stems by whole bars, so the alignment has to be in the audio; delaying it is lossless, needs no guessed pre-roll, and gives a count-in. The earlier row claimed the untrimmed take was kept as a session `Take`; nothing in the product writes one, and with nothing cut there is nothing to keep. |
+| 2026-09-27 | **Exactly one bar of drums before the singer** (owner decision) | Whole bars of lead-in before the first note's bar are dropped: a 10 s wait had become five bars of drums over room noise on every loop. |
 | 2026-09-27 | **Each style has its own tempo** (owner decision) | Every style chip gave 92 BPM — Easy Mode's default wearing the style's name. |
 | 2026-09-27 | **Tap to start, tap to stop**, up to 30 s (owner decision) | A fixed 3.5 s capture made every accompaniment a one- or two-bar loop. |
 | 2026-09-26 | **Your voice plus the styled drums — no generated melody over you** | A generated line would compete with the singer for the same space; accompaniment sits *under* a voice. What makes a track feel like it is in your key is bass and harmony, which are the next requirements, not a melody. |
@@ -92,3 +94,4 @@ None — settled in the decision log.
 
 - 2026-09-26 — created, accepted for M8.
 - 2026-09-27 — architect design review round 1 and three owner decisions: count-in, per-style tempos, tap to stop.
+- 2026-09-27 — QA round 1 (FAIL on AC2) and a fourth owner decision: exactly one bar in.

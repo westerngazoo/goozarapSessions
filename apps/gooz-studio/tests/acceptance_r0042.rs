@@ -736,7 +736,13 @@ mod qa_signoff {
     /// The voice is the take delayed and scaled by one gain, so its loudest
     /// sample is the take's loudest, `pad` later. Checked at three more points,
     /// so a harness that mis-measures fails loudly instead of passing.
-    fn delay_of(take: &[f32], song: &Accompaniment) -> usize {
+    /// Where the take sits in the voice: `voice[i + offset] == take[i] · gain`.
+    ///
+    /// Negative when whole bars of lead-in were dropped (owner decision,
+    /// 2026-09-27: exactly one bar of drums before the singer). Checked at
+    /// three points after the loudest sample — inside the singing, so inside
+    /// what was kept — so the harness fails loudly rather than mis-measuring.
+    fn offset_of(take: &[f32], song: &Accompaniment) -> i64 {
         let loudest = |xs: &[f32]| {
             xs.iter()
                 .enumerate()
@@ -751,18 +757,28 @@ mod qa_signoff {
         };
         let voice = &song.voice.samples;
         let (t, v) = (loudest(take), loudest(voice));
-        assert!(v >= t, "harness: the voice starts before the take");
-        let pad = v - t;
+        let offset = v as i64 - t as i64;
         let gain = voice[v] / take[t];
-        for k in [take.len() / 3, take.len() / 2, 2 * take.len() / 3] {
+        let rest = take.len() - t;
+        for k in [t, t + rest / 4, t + rest / 2] {
+            let j = k as i64 + offset;
             assert!(
-                (voice[pad + k] - take[k] * gain).abs() <= 1e-5,
-                "harness: the voice is not the take delayed by {pad}"
+                (0..voice.len() as i64).contains(&j),
+                "harness: take sample {k} is not in the voice"
+            );
+            assert!(
+                (voice[j as usize] - take[k] * gain).abs() <= 1e-5,
+                "harness: the voice is not the take offset by {offset}"
             );
         }
-        pad
+        offset
     }
-
+    /// [`offset_of`] for a take kept whole: where its first sample sits.
+    fn delay_of(take: &[f32], song: &Accompaniment) -> usize {
+        let offset = offset_of(take, song);
+        assert!(offset >= 0, "harness: expected the whole take to be kept");
+        offset as usize
+    }
     fn bar_len(song: &Accompaniment) -> usize {
         song.voice.samples.len() / song.voice.bars as usize
     }
@@ -782,9 +798,10 @@ mod qa_signoff {
 
     fn landing(take: &[f32], song: &Accompaniment, note: usize) -> Landing {
         let bar = bar_len(song);
-        let landed = delay_of(take, song) + note;
-        // "The downbeat of the bar after the one it started in" (AC2).
-        let want_bar = note / bar + 1;
+        let landed = (note as i64 + offset_of(take, song)).max(0) as usize;
+        // Exactly one bar of drums, then the first sung note: the downbeat of
+        // bar 2, however long the singer waited (owner decision, 2026-09-27).
+        let want_bar = 1;
         Landing {
             error_ms: (landed as f64 - (want_bar * bar) as f64) * 1000.0
                 / f64::from(song.voice.sample_rate),
@@ -969,39 +986,45 @@ mod qa_signoff {
     }
 
     #[test]
-    fn ac2_a_lead_in_of_any_length_is_kept_and_the_note_enters_on_the_next_bar_line() {
-        // At 131 BPM a bar is 1.832 s. A note 1.9 s in started in bar 2, so it
-        // enters on bar 3's downbeat; 10 s in, bar 6 → bar 7. The lead-in is
-        // delayed with the rest, never trimmed (owner decision 2026-09-27).
+    fn ac2_a_lead_in_of_any_length_gets_exactly_one_bar_of_drums() {
+        // Owner decision (2026-09-27): however long the singer waits after
+        // tapping, the drums play exactly one bar before them. At 131 BPM a bar
+        // is 1.832 s; a note 1.9 s in and a note 10 s in both enter on bar 2's
+        // downbeat. Before, the 10 s wait became five bars of drums over room
+        // noise — replayed on every loop.
         let rate = 16_000;
-        for (lead, want_bar) in [(1.9, 2), (10.0, 6)] {
+        for lead in [1.9, 10.0] {
             let take = in_room(sing(rate, 131.0, 8, lead, 0.010), -55.0, 14);
             let song = accompany_take(&take, rate, "trap", TENSE).expect("a sung take");
             let what = format!("a {lead} s lead-in");
             assert_one_mix(&song, rate, &what);
             let landed = landing(&take, &song, at(rate, lead));
-            assert_eq!(landed.want_bar, want_bar, "{what}: fixture");
-            assert_eq!(landed.nearest_bar, want_bar, "{what}: the wrong bar");
+            assert_eq!(landed.nearest_bar, 1, "{what}: not after exactly one bar");
             assert!(
                 (-(10.0 + hop_ms(rate))..=hop_ms(rate)).contains(&landed.error_ms),
                 "{what}: {:+.1} ms from the downbeat",
                 landed.error_ms
             );
-            // Nothing cut: the whole take is in the voice, after silence.
-            let pad = delay_of(&take, &song);
+            // The wait is gone from the loop: one count-in bar plus the eight
+            // sung beats (3.66 s, two bars), rounded up — not seven bars.
             assert!(
-                pad + take.len() <= song.voice.samples.len(),
-                "{what}: trimmed"
+                song.voice.bars <= 4,
+                "{what}: the loop is {} bars — the wait is still in it",
+                song.voice.bars
             );
-            assert!(
-                song.voice.samples[..pad].iter().all(|s| *s == 0.0),
-                "{what}: the count-in is not silence"
-            );
+            // Only whole bars are dropped, so the voice's first sound is inside
+            // the count-in bar and the singer is still on the downbeat.
+            let first_sound = song
+                .voice
+                .samples
+                .iter()
+                .position(|s| *s != 0.0)
+                .expect("sound");
+            assert!(first_sound <= bar_len(&song), "{what}: no count-in");
         }
     }
 
     #[test]
-    #[ignore = "QA R-0042 AC2 FAIL: a soft sung onset in a laptop-quiet room enters 700 ms late"]
     fn ac2_a_soft_sung_onset_in_a_quiet_room_enters_on_the_downbeat() {
         // Measured on fb253ef (deterministic; release and debug agree):
         //   48 kHz,   60 ms onset, -50 dBFS RMS room: +700.0 ms (lands at bar 1.344)
@@ -1032,7 +1055,6 @@ mod qa_signoff {
     }
 
     #[test]
-    #[ignore = "QA R-0042 AC2 FAIL: an 's' before the first vowel puts it 47 ms behind the kick at 16 kHz"]
     fn ac2_a_sibilant_before_the_first_vowel_does_not_make_the_singer_late() {
         // "sí", "se", "so": 110 ms of "s" (-18 dB under the vowel's peak) runs
         // straight into the first sung vowel at 0.7 s. The sung note — the
@@ -1060,7 +1082,6 @@ mod qa_signoff {
     }
 
     #[test]
-    #[ignore = "QA R-0042 AC2 FAIL: a quiet take in a noisy room can enter ~40 ms late"]
     fn ac2_a_quiet_take_in_a_noisy_room_enters_on_the_downbeat() {
         // A -30 dBFS-peak take (a quiet singer on a laptop) under room noise.
         // The attack search starts 20 ms *before* the detected onset and takes
@@ -1584,7 +1605,6 @@ mod qa_signoff {
     }
 
     #[test]
-    #[ignore = "QA R-0042 regression (pre-existing, aggravated): a described 6/8 song mixes 2/3 of its drums"]
     fn regression_a_described_six_eight_song_mixes_to_its_full_length() {
         // `build_song` now saves `riff.bpm` (135) where it saved 92, but still
         // writes `beats_per_bar: 4` whatever the meter. For a 6/8 prompt the
@@ -1604,4 +1624,89 @@ mod qa_signoff {
             described.beat.samples.len()
         );
     }
+
+    #[test]
+    fn ac7_a_room_that_drowns_the_voice_is_refused_not_misaligned() {
+        // A fan or an air conditioner: rumble within 8 dB of a quiet singer.
+        // The pitch tracker cannot hear singing through it, so there is no
+        // sung note to put on the downbeat — and the answer is a typed error
+        // the app shows, not a track laid against the rumble. (The gate that
+        // keeps a noisy room out of the note's start is tested directly in
+        // `gooz-dsp`, with a pitch track that does hear the voice.)
+        for rate in [48_000, 16_000] {
+            let mut take: Vec<f32> = sing(rate, 118.0, 8, LEAD, 0.010)
+                .iter()
+                .map(|s| s * (linear(-30.0) / 0.6) as f32)
+                .collect();
+            let rumble_amp = linear(-38.0) * std::f64::consts::SQRT_2;
+            for (i, s) in take.iter_mut().enumerate() {
+                let t = i as f64 / f64::from(rate);
+                let hum = (std::f64::consts::TAU * 48.0 * t).sin()
+                    + 0.5 * (std::f64::consts::TAU * 61.0 * t + 1.0).sin();
+                *s += (rumble_amp / 1.118 * hum) as f32;
+            }
+            let take = in_room(take, -60.0, 21);
+            assert_eq!(
+                accompany_take(&take, rate, "trap", TENSE).unwrap_err(),
+                DspError::Silent,
+                "{rate} Hz"
+            );
+        }
+    }
+
+    #[test]
+    fn ac2_a_stray_pitched_blip_before_the_song_is_not_its_first_note() {
+        // A 30 ms pitched squeak — a chair, a hum under the breath — 0.35 s
+        // before the first sung note. It is voiced, but far too short to be a
+        // sung note (80 ms). Were any voiced frame enough, the blip would be
+        // put on the downbeat and the singer would enter 350 ms late.
+        for rate in [48_000, 16_000] {
+            let mut take = sing(rate, 118.0, 8, LEAD, 0.010);
+            let blip_at = at(rate, LEAD - 0.35);
+            let blip: Vec<f32> = (0..at(rate, 0.030))
+                .map(|i| {
+                    let t = i as f64 / f64::from(rate);
+                    (0.5 * (std::f64::consts::TAU * 330.0 * t).sin()) as f32
+                })
+                .collect();
+            mix_in(&mut take, &blip, blip_at);
+            let take = in_room(take, -60.0, 22);
+            let song = accompany_take(&take, rate, "trap", TENSE).expect("a sung take");
+            let landed = landing(&take, &song, at(rate, LEAD));
+            assert!(
+                (-(10.0 + hop_ms(rate))..=hop_ms(rate)).contains(&landed.error_ms),
+                "{rate} Hz: the note lands {:+.1} ms from the downbeat — the blip was taken for it",
+                landed.error_ms
+            );
+        }
+    }
+}
+
+#[test]
+fn a_stereo_microphone_is_heard_at_its_own_pitch_and_tempo() {
+    // Most USB microphones and interfaces record two channels, and the capture
+    // hands over interleaved frames: L R L R … Read as one channel, that is
+    // twice as many samples as there are frames — half speed, an octave low.
+    // The shell now downmixes with `Take::mono` before anything listens.
+    let mono = Take::at(118.0, 262.0).render();
+    let interleaved: Vec<f32> = mono.iter().flat_map(|&s| [s, s]).collect();
+    let take = gooz_audio::Take::new(interleaved.clone(), SR, 2);
+
+    let heard = accompany_take(&take.mono(), SR, "trap", TENSE).expect("a stereo take");
+    let root = heard.voice.followed_root_hz.expect("a pitch");
+    assert!(
+        (1200.0 * (root / 262.0).log2()).abs() < 40.0,
+        "root {root:.1} Hz"
+    );
+    let bpm = heard.voice.followed_bpm.expect("a pulse");
+    assert!((bpm - 118.0).abs() < 4.0, "tempo {bpm:.1}");
+
+    // And the defect this closes, so the test cannot pass without it: the raw
+    // interleaved samples are heard an octave low.
+    let misread = accompany_take(&interleaved, SR, "trap", TENSE).expect("still a take");
+    let low = misread.voice.followed_root_hz.expect("a pitch");
+    assert!(
+        (1200.0 * (low / 131.0).log2()).abs() < 60.0,
+        "interleaved stereo read as mono should sound an octave low; got {low:.1} Hz"
+    );
 }
