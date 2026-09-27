@@ -59,6 +59,38 @@ impl Take {
         }
     }
 
+    /// The take as one channel: each frame's channels averaged.
+    ///
+    /// Everything downstream of a recording — pitch, onsets, tempo, and R-0042's
+    /// voice, which is played back as recorded — reads one channel. Handing it
+    /// interleaved stereo (`L R L R …`) instead reads twice as many samples as
+    /// there are frames: the take analyses and plays **at half speed, an octave
+    /// low**, and its followed tempo comes out halved. Most USB microphones and
+    /// audio interfaces default to two channels.
+    ///
+    /// A trailing partial frame is dropped. A mono take comes back unchanged.
+    ///
+    /// ```
+    /// use gooz_audio::Take;
+    ///
+    /// let stereo = Take::new(vec![0.2, 0.4, -0.6, -0.2], 48_000, 2);
+    /// assert_eq!(stereo.mono(), vec![0.3, -0.4]);
+    ///
+    /// let mono = Take::new(vec![0.1, 0.2, 0.3], 48_000, 1);
+    /// assert_eq!(mono.mono(), vec![0.1, 0.2, 0.3]);
+    /// ```
+    pub fn mono(&self) -> Vec<f32> {
+        match self.channels {
+            0 => Vec::new(),
+            1 => self.samples.clone(),
+            n => self
+                .samples
+                .chunks_exact(n as usize)
+                .map(|frame| frame.iter().sum::<f32>() / f32::from(n))
+                .collect(),
+        }
+    }
+
     /// The duration in seconds (`frames / sample_rate`).
     ///
     /// ```

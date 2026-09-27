@@ -68,6 +68,34 @@ impl From<&QuantizedNote> for NoteView {
     }
 }
 
+/// What a riff *is*, so it is saved under a name that says so.
+///
+/// Every riff used to be saved as `"guitar"` — including R-0040's sampled knock
+/// and R-0042's recorded voice, which would have exported as `00-guitar.wav`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum Part {
+    /// A melody rendered as a plucked guitar: hum→riff (R-0008) or a described
+    /// song (R-0027).
+    Guitar,
+    /// A recording played across the grid (R-0040).
+    Instrument,
+    /// A sung take, as sung (R-0042).
+    Voice,
+}
+
+impl Part {
+    /// The stem name and kind this part is saved as. The session format has
+    /// no voice kind; a voice is `Other`, named for what it is.
+    fn stem(self) -> (&'static str, StemKind) {
+        match self {
+            Part::Guitar => ("guitar", StemKind::Riff),
+            Part::Instrument => ("instrument", StemKind::Riff),
+            Part::Voice => ("voice", StemKind::Other),
+        }
+    }
+}
+
 /// A riff prepared for the UI: what it heard, a waveform envelope to draw, and
 /// the raw samples to play.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -92,12 +120,28 @@ pub struct RiffView {
     /// The grid root taken from the take, or `None` when Easy Mode's own root
     /// stood in, for the same reasons.
     pub followed_root_hz: Option<f64>,
+    /// The tempo the riff was **laid out at**, in BPM — always known, whoever
+    /// chose it.
+    ///
+    /// `followed_bpm` says what came from the take; this says what the audio
+    /// is. A saved session writes this one: writing
+    /// `followed_bpm.unwrap_or(92)` was right only because three unrelated
+    /// constants happened to be 92, and was wrong the moment a style supplied
+    /// its own tempo (R-0042).
+    pub bpm: f64,
+    /// How many beats make one of the riff's bars — with [`bpm`](Self::bpm),
+    /// the clock the audio is on. A saved session writes both: writing 4 for a
+    /// described 6/8 song made the mixdown's bars two-thirds the length of the
+    /// song's and cut its drums short.
+    pub beats_per_bar: f64,
+    /// What the riff is.
+    pub part: Part,
 }
 
 impl RiffView {
-    /// Builds a UI view from a pipeline outcome, downsampling the stem to a
-    /// [`WAVE_BUCKETS`]-point peak envelope.
-    pub fn from_outcome(outcome: &RiffOutcome) -> RiffView {
+    /// Builds a UI view from a hum→riff outcome laid out at `tempo`,
+    /// downsampling the stem to a [`WAVE_BUCKETS`]-point peak envelope.
+    pub fn from_outcome(outcome: &RiffOutcome, tempo: &Tempo) -> RiffView {
         let stem = &outcome.stem;
         let notes = outcome.notes.iter().map(NoteView::from).collect();
         let seconds = if stem.sample_rate == 0 {
@@ -114,6 +158,9 @@ impl RiffView {
             samples: stem.samples.clone(),
             followed_bpm: None,
             followed_root_hz: None,
+            bpm: tempo.bpm(),
+            beats_per_bar: tempo.beats_per_bar(),
+            part: Part::Guitar,
         }
     }
 }
@@ -142,17 +189,18 @@ pub fn riff_from_take(samples: &[f32], sample_rate: u32, tense: u8) -> Result<Ri
     // two questions about one take should not cost two passes over it.
     let transcription = analyze(samples, sample_rate, &cfg.analyze)?;
     let heard = follow(samples, sample_rate, &transcription);
+    let tempo = followed_tempo(&heard);
     let outcome = riff_from_transcription(
         transcription,
         sample_rate,
         &followed_grid(tense, &heard),
-        &followed_tempo(&heard),
+        &tempo,
         &cfg,
     );
     Ok(RiffView {
         followed_bpm: heard.bpm,
         followed_root_hz: heard.root_hz,
-        ..RiffView::from_outcome(&outcome)
+        ..RiffView::from_outcome(&outcome, &tempo)
     })
 }
 
@@ -167,19 +215,20 @@ pub fn riff_from_take(samples: &[f32], sample_rate: u32, tense: u8) -> Result<Ri
 pub fn demo_riff() -> RiffView {
     let sample_rate = 48_000u32;
     let hum = demo_hum(sample_rate);
+    let tempo = easy_mode_tempo();
     let outcome = hum_to_riff(
         &hum,
         sample_rate,
         &easy_mode_grid(DEFAULT_TENSE),
-        &easy_mode_tempo(),
+        &tempo,
         &PipelineConfig::default(),
     )
     .expect("the demo hum is a valid, finite, non-empty signal");
-    RiffView::from_outcome(&outcome)
+    RiffView::from_outcome(&outcome, &tempo)
 }
 
 /// Easy Mode's grid, rooted where the take sits when the take said.
-fn followed_grid(tense: u8, heard: &Follow) -> PitchGrid {
+pub(crate) fn followed_grid(tense: u8, heard: &Follow) -> PitchGrid {
     let root = heard.root_hz.unwrap_or(GRID_ROOT_HZ);
     PitchGrid::harmonic(root, odd_limit_for(tense)).unwrap_or_else(|_| easy_mode_grid(tense))
 }
@@ -387,8 +436,8 @@ pub fn build_song(
     // Whatever the riff followed is what the song is in. A session that says
     // 92 BPM for a riff rendered at 126 is a file that lies about itself.
     let settings = Settings {
-        bpm: riff.and_then(|r| r.followed_bpm).unwrap_or(TEMPO_BPM),
-        beats_per_bar: BEATS_PER_BAR,
+        bpm: riff.map_or(TEMPO_BPM, |r| r.bpm),
+        beats_per_bar: riff.map_or(BEATS_PER_BAR, |r| r.beats_per_bar),
         root_hz: riff
             .and_then(|r| r.followed_root_hz)
             .unwrap_or(GRID_ROOT_HZ),
@@ -399,11 +448,12 @@ pub fn build_song(
     let mut span_bars = 0u32;
 
     if let Some(r) = riff.filter(|r| !r.samples.is_empty()) {
+        let (stem_name, stem_kind) = r.part.stem();
         let idx = song.stems.len();
         song = song
             .with_stem(Stem {
-                name: "guitar".into(),
-                kind: StemKind::Riff,
+                name: stem_name.into(),
+                kind: stem_kind,
                 sample_rate: r.sample_rate,
                 bars: r.bars,
                 samples: r.samples.clone(),

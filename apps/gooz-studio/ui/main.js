@@ -12,13 +12,29 @@ let playing = false;
 let busy = false;
 
 // What the recording becomes: "hum" runs the hum→riff pipeline (R-0008),
-// "instrument" plays the take back across the ratio grid (R-0040).
+// "instrument" plays the take back across the ratio grid (R-0040), "style" puts
+// the take over a drum track in a chosen style (R-0042).
 let mode = "hum";
+
+// The chosen style (a preset id), and the styled drums of the current result.
+// While `track` is set it *is* the beat: playing, saving and exporting use it,
+// and nothing fetches a generic Easy Mode beat over it.
+let style = null;
+let track = null;
+
+// A capture in progress: tap to start, tap again to stop (R-0042). The shell
+// caps a take at 30 s; the UI stops itself at the same point.
+const MAX_RECORD_MS = 30_000;
+let recording = null;
+
+// The preset ids when there is no shell to ask (browser preview).
+const PREVIEW_STYLES = ["corrido", "trap", "metal", "free"];
+const STYLE_LABELS = { free: "libre" };
 
 const MODES = {
   hum: {
     prompt: "hum something",
-    hint: "tap &amp; hum a melody — no theory, just a sound.",
+    hint: "tap &amp; hum a melody, tap again to stop — no theory, just a sound.",
     label: "hum",
     heard: "esto escuché",
     stop: "record_stop_analyze",
@@ -27,13 +43,22 @@ const MODES = {
   },
   instrument: {
     prompt: "make any sound",
-    hint: "tap &amp; hit the table, click, knock — it becomes your instrument.",
+    hint: "tap &amp; hit the table, click, knock, tap again to stop — it becomes your instrument.",
     label: "sound",
     heard: "tu instrumento",
     stop: "record_stop_instrument",
     // No demo here: the hum demo is a guitar built from a synthetic hum, and
     // showing it under "tu instrumento" would be showing someone else's sound.
     demo: false,
+  },
+  style: {
+    prompt: "sing something",
+    hint: "pick a style, tap &amp; sing — tap again to stop. the drums follow you.",
+    label: "sing",
+    heard: "tú sobre el estilo",
+    stop: "record_stop_accompany",
+    demo: false,
+    chips: true,
   },
 };
 
@@ -49,7 +74,7 @@ function onDemo(e) {
   busy = true;
   setModesEnabled(false);
   demo()
-    .then((data) => showResult(data, MODES.hum.heard))
+    .then((data) => present(data, MODES.hum))
     .finally(() => {
       busy = false;
       setModesEnabled(true);
@@ -59,7 +84,49 @@ function onDemo(e) {
 // The mode can only change while nothing is in flight: a result must be labelled
 // by the mode that produced it, not by whichever pill was tapped since.
 function setModesEnabled(on) {
-  for (const btn of document.querySelectorAll(".mode")) btn.disabled = !on;
+  for (const btn of document.querySelectorAll(".mode, .style-chip")) btn.disabled = !on;
+}
+
+// ---- style chips: one per preset, asked from the engine ----
+// One request for the style list, shared by every mode switch that asks —
+// toggling twice before it answers must not add the chips twice — and
+// forgotten if it fails, so the next switch tries again.
+let stylesRequest = null;
+function loadStyles() {
+  if (stylesRequest) return stylesRequest;
+  stylesRequest = (invoke ? invoke("styles") : Promise.resolve(PREVIEW_STYLES))
+    .then(renderStyles)
+    .catch((err) => {
+      stylesRequest = null;
+      showIntroMessage(`couldn't load the styles: ${err}`);
+    });
+  return stylesRequest;
+}
+
+function renderStyles(names) {
+  const row = document.getElementById("styles");
+  row.replaceChildren();
+  for (const name of names) {
+    const chip = document.createElement("button");
+    chip.className = "style-chip";
+    chip.setAttribute("role", "radio");
+    chip.setAttribute("aria-checked", "false");
+    chip.dataset.style = name;
+    chip.textContent = STYLE_LABELS[name] || name;
+    chip.addEventListener("click", () => pickStyle(name));
+    row.appendChild(chip);
+  }
+}
+
+function pickStyle(name) {
+  if (busy || recording) return;
+  style = name;
+  for (const chip of document.querySelectorAll(".style-chip")) {
+    const on = chip.dataset.style === name;
+    chip.classList.toggle("is-on", on);
+    chip.setAttribute("aria-checked", String(on));
+  }
+  showIntroMessage("");
 }
 
 // Something went wrong with a take: say so, on the screen the user is looking at.
@@ -81,6 +148,8 @@ function setMode(next) {
     : copy.hint;
   if (copy.demo) document.getElementById("demoLink").addEventListener("click", onDemo);
   document.getElementById("recBtn").querySelector(".label").textContent = copy.label;
+  document.getElementById("styles").classList.toggle("hidden", !copy.chips);
+  if (copy.chips) loadStyles();
   showIntroMessage("");
   for (const btn of document.querySelectorAll(".mode")) {
     const on = btn.dataset.mode === mode;
@@ -97,29 +166,55 @@ async function demo() {
 
 // ---- record / demo ----
 async function onRecord() {
+  if (recording) return finishRecording();
   if (busy) return;
+  const copy = MODES[mode];
+  if (copy.chips && !style) return showIntroMessage("pick a style first — then sing");
+  showIntroMessage("");
+  if (!invoke) {
+    // Browser preview: there is no microphone here.
+    if (!copy.demo) return showIntroMessage("recording needs the desktop app — there is no microphone here");
+    busy = true;
+    setModesEnabled(false);
+    try {
+      await wait(1500);
+      present(await demo(), MODES.hum);
+    } finally {
+      busy = false;
+      setModesEnabled(true);
+    }
+    return;
+  }
   busy = true;
   setModesEnabled(false);
-  showIntroMessage("");
-  // Captured now, so the result is labelled by the mode that recorded it.
-  const copy = MODES[mode];
-  const rec = document.getElementById("recBtn");
-  document.body.classList.add("listening");
-  rec.querySelector(".label").textContent = "listening…";
   try {
-    if (invoke) {
-      await invoke("record_start");
-      await wait(3500); // ~3.5s to hum a melody or make a sound
-      showResult(await invoke(copy.stop, { tense: tenseValue() }), copy.heard);
-    } else if (copy.demo) {
-      await wait(1500);
-      showResult(await demo(), copy.heard);
-    } else {
-      showIntroMessage("recording needs the desktop app — there is no microphone here");
-    }
+    await invoke("record_start");
+  } catch (err) {
+    showIntroMessage(`couldn't start recording: ${err}`);
+    busy = false;
+    setModesEnabled(true);
+    return;
+  }
+  document.body.classList.add("listening");
+  document.getElementById("recBtn").querySelector(".label").textContent = "tap to stop";
+  // Captured now, so the result is labelled by the mode that recorded it.
+  recording = { copy, timer: setTimeout(finishRecording, MAX_RECORD_MS) };
+}
+
+async function finishRecording() {
+  if (!recording) return;
+  const { copy, timer } = recording;
+  recording = null;
+  clearTimeout(timer);
+  const rec = document.getElementById("recBtn");
+  rec.querySelector(".label").textContent = "working…";
+  try {
+    // Each stop command gets exactly its own arguments.
+    const args = copy.chips ? { tense: tenseValue(), style } : { tense: tenseValue() };
+    present(await invoke(copy.stop, args), copy);
   } catch (err) {
     if (copy.demo) {
-      showResult(await demo(), copy.heard); // R-0013's graceful fallback
+      present(await demo(), MODES.hum); // R-0013's graceful fallback
     } else {
       // A typed error from the take — silence, a clipped mic, a corrupt sample.
       // The user can fix any of those by recording again, if they are told.
@@ -131,6 +226,30 @@ async function onRecord() {
     busy = false;
     setModesEnabled(true);
   }
+}
+
+// A result from any mode. An accompaniment is two stems: the voice is shown and
+// played as the riff, and its styled drums become *the* beat.
+function present(result, copy) {
+  if (copy.chips) {
+    stopBeat();
+    track = result.track;
+    lastBeat = track;
+    showResult(result.voice, copy.heard);
+  } else {
+    track = null;
+    showResult(result, copy.heard);
+  }
+  setBeatControlsEnabled(!track);
+}
+
+// With a styled track, voice and drums are one loop started from one play
+// button at one scheduled instant. The busy slider and the beat button would
+// restart the drums alone "now", while the voice kept its place — out of step
+// on every drag. So while there is a track, they are off.
+function setBeatControlsEnabled(on) {
+  document.getElementById("busyRng").disabled = !on;
+  document.getElementById("beatBtn").disabled = !on;
 }
 
 // ---- render ----
@@ -204,18 +323,23 @@ function showResult(data, heading) {
     s.textContent = `bar ${b}`;
     bl.appendChild(s);
   }
-  // The tempo the riff was actually laid out at, and whether it was yours.
-  const followed = data.followedBpm != null;
-  const bpm = Math.round(followed ? data.followedBpm : 92);
+  // The tempo the riff was actually laid out at, and whose it was.
+  const bpm = Math.round(data.bpm ?? 92);
+  const whose =
+    data.followedBpm != null ? " · tu tempo" : data.part === "voice" ? " · tempo del estilo" : "";
   document.getElementById("meta").textContent =
-    `${data.bars} bars · ${(data.seconds || 0).toFixed(1)}s · ${bpm} bpm` +
-    (followed ? " · tu tempo" : "");
+    `${data.bars} bars · ${(data.seconds || 0).toFixed(1)}s · ${bpm} bpm${whose}`;
   refreshBeat();
   document.getElementById("intro").classList.add("hidden");
   document.getElementById("result").classList.remove("hidden");
 }
 function reset() {
   stopAudio();
+  if (track) {
+    stopBeat();
+    track = null;
+    setBeatControlsEnabled(true);
+  }
   document.getElementById("result").classList.add("hidden");
   document.getElementById("intro").classList.remove("hidden");
 }
@@ -247,7 +371,10 @@ function synthBuffer(ctx, data) {
 }
 async function togglePlay() {
   const btn = document.getElementById("playBtn");
-  if (playing) return stopAudio();
+  if (playing) {
+    if (track) stopBeat();
+    return stopAudio();
+  }
   audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
   await audioCtx.resume();
   let buf;
@@ -261,7 +388,11 @@ async function togglePlay() {
   node.buffer = buf;
   node.loop = true;
   node.connect(audioCtx.destination);
-  node.start();
+  // With a styled track, both loops start at one scheduled instant. They are
+  // the same length by construction (R-0042), so they stay locked together.
+  const at = audioCtx.currentTime + 0.05;
+  if (track) startBeatNode(track, at);
+  node.start(at);
   playing = true;
   btn.textContent = "◼ stop";
 }
@@ -301,6 +432,9 @@ function scale(min, max, b) { return Math.round(min + (max - min) * (b / 100)); 
 // Backend beat when Tauri is present; otherwise a client-side synth so the
 // button still works in a plain browser preview.
 async function fetchBeat(busy) {
+  // An accompaniment's drums are the style's; the busy slider does not swap a
+  // generic Easy Mode beat in under the voice.
+  if (track) return track;
   // The beat plays under the riff, so it follows whatever the riff
   // followed — otherwise a take heard at 126 BPM gets a 92 BPM loop.
   if (invoke) return invoke("beat", { busy, bpm: current?.followedBpm ?? null });
@@ -359,9 +493,13 @@ function stopBeat() {
 async function playBeat() {
   const data = await fetchBeat(busyValue());
   lastBeat = data;
-  showLanes(data.voices);
   audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
   await audioCtx.resume();
+  startBeatNode(data, audioCtx.currentTime);
+}
+
+function startBeatNode(data, at) {
+  showLanes(data.voices);
   const buf = audioCtx.createBuffer(1, data.samples.length, data.sampleRate);
   buf.copyToChannel(Float32Array.from(data.samples), 0);
   if (beatNode) { try { beatNode.stop(); } catch (_) {} }
@@ -369,7 +507,7 @@ async function playBeat() {
   beatNode.buffer = buf;
   beatNode.loop = true;
   beatNode.connect(audioCtx.destination);
-  beatNode.start();
+  beatNode.start(at);
   beatPlaying = true;
   document.getElementById("beatBtn").textContent = "◼ beat";
 }
@@ -378,11 +516,13 @@ async function playBeat() {
 // that claim the new tempo. So the beat is fetched again for the new riff:
 // restarted if it was playing, replaced if it was only held for save/export.
 async function refreshBeat() {
+  if (track) return; // the styled track is the beat; nothing to re-fetch
   if (beatPlaying) return playBeat();
   if (lastBeat) lastBeat = await fetchBeat(busyValue());
 }
 
 async function toggleBeat() {
+  if (track) return; // the style's drums play with the voice, from play
   if (beatPlaying) return stopBeat();
   await playBeat();
 }
@@ -424,6 +564,6 @@ for (const btn of document.querySelectorAll(".mode")) {
 document.getElementById("playBtn").addEventListener("click", togglePlay);
 document.getElementById("redoBtn").addEventListener("click", reset);
 document.getElementById("beatBtn").addEventListener("click", toggleBeat);
-document.getElementById("busyRng").addEventListener("input", () => { if (beatPlaying) playBeat(); });
+document.getElementById("busyRng").addEventListener("input", () => { if (beatPlaying && !track) playBeat(); });
 document.getElementById("saveBtn").addEventListener("click", () => saveOrExport("save_session", "saved session"));
 document.getElementById("exportBtn").addEventListener("click", () => saveOrExport("export_master", "exported wav"));

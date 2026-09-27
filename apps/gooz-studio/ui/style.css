@@ -119,6 +119,17 @@ body.listening .rec { box-shadow: 0 0 0 1px rgba(255, 45, 111, 0.8), 0 0 90px rg
 }
 .mode:hover { color: var(--text); }
 .mode:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* style chips — one per preset the engine has a pattern for */
+.styles { display: flex; gap: 8px; margin: -8px 0 20px; flex-wrap: wrap; justify-content: center; }
+.style-chip {
+  font-family: inherit; font-size: 11px; letter-spacing: 0.12em; text-transform: lowercase;
+  padding: 7px 14px; border-radius: 999px; cursor: pointer;
+  border: 1px solid var(--line); background: transparent; color: var(--dim);
+}
+.style-chip:hover { color: var(--text); }
+.style-chip.is-on { color: var(--pink); border-color: var(--pink); box-shadow: 0 0 16px rgba(236, 72, 153, 0.25); }
+.style-chip:disabled { opacity: 0.4; cursor: not-allowed; }
 .mode.is-on {
   color: var(--violet); border-color: var(--violet);
   box-shadow: 0 0 18px rgba(168, 85, 247, 0.25);
@@ -139,6 +150,7 @@ body.listening .rec { box-shadow: 0 0 0 1px rgba(255, 45, 111, 0.8), 0 0 90px rg
 .beatbar { display: flex; align-items: center; gap: 14px; }
 .btn.beat { border-color: var(--pink); color: var(--pink); box-shadow: 0 0 22px rgba(236, 72, 153, 0.28); }
 .btn.beat:hover { background: rgba(236, 72, 153, 0.1); }
+.btn:disabled, .rng:disabled { opacity: 0.35; cursor: not-allowed; }
 .beatlanes { font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--dim); }
 
 @media (max-width: 640px) { .prompt { font-size: 26px; } .rec { width: 150px; height: 150px; } }
