@@ -19,13 +19,16 @@ use std::path::PathBuf;
 use gooz_audio::{AudioBackend, CpalBackend, Engine};
 use gooz_studio::{
     BeatView, RiffView, beat_view as beat_view_impl, demo_riff as demo_riff_view,
-    export_master as export_master_impl, instrument_from_take, riff_from_take,
+    Accompaniment, accompany_take, export_master as export_master_impl, instrument_from_take,
+    riff_from_take, style_names,
     save_session as save_session_impl,
 };
 use tauri::State;
 
-/// Max seconds of microphone audio buffered per take.
-const MAX_RECORD_SECS: usize = 12;
+/// Max seconds of microphone audio buffered per take. Recording is tap to
+/// start, tap to stop (R-0042); this is the safety cap if the second tap never
+/// comes. The UI stops itself at the same point.
+const MAX_RECORD_SECS: usize = 30;
 
 /// A microphone capture running on its own thread. cpal streams are `!Send`, so
 /// the engine is created, driven, and dropped entirely on this thread; only the
@@ -139,6 +142,25 @@ fn record_stop_analyze(recorder: State<'_, Recorder>, tense: u8) -> Result<RiffV
     riff_from_take(&samples, sample_rate, tense).map_err(|e| e.to_string())
 }
 
+/// Stops capture and puts the take over a drum track in `style`, at the take's
+/// tempo, entering on a downbeat (R-0042).
+#[tauri::command]
+fn record_stop_accompany(
+    recorder: State<'_, Recorder>,
+    tense: u8,
+    style: String,
+) -> Result<Accompaniment, String> {
+    let (samples, sample_rate) = stop_and_take(&recorder)?;
+    accompany_take(&samples, sample_rate, &style, tense).map_err(|e| e.to_string())
+}
+
+/// The styles a take can be sung over — the preset table, asked rather than
+/// hard-coded in the webview, so the choices cannot drift from the patterns.
+#[tauri::command]
+fn styles() -> Vec<&'static str> {
+    style_names()
+}
+
 /// Stops capture and plays the take back across the ratio grid — the recording
 /// becomes the instrument (R-0040).
 #[tauri::command]
@@ -157,7 +179,9 @@ fn main() {
             export_master,
             record_start,
             record_stop_analyze,
-            record_stop_instrument
+            record_stop_instrument,
+            record_stop_accompany,
+            styles
         ])
         .run(tauri::generate_context!())
         .expect("error while running the goozarapSessions shell");

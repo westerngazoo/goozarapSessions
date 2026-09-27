@@ -63,6 +63,13 @@ pub struct SoundPlan {
     pub voices: Vec<VoicePlan>,
     /// Which preset produced this plan (`"trap"`, `"corrido"`, `"free"`, …).
     pub preset: String,
+    /// The tempo this style is played at on its own, in BPM (R-0042).
+    ///
+    /// Alongside [`tempo_bpm`](Self::tempo_bpm), never instead of it: the
+    /// intent's tempo stays what a description asked for, and a caller with no
+    /// tempo of its own — a take with no pulse, sung over a style — reaches for
+    /// this one.
+    pub style_bpm: f64,
 }
 
 /// A lane's shape within a preset: how sparse/busy it can get, where its accent
@@ -83,6 +90,8 @@ struct Preset {
     name: &'static str,
     /// Intent genre tags that select this preset.
     tags: &'static [&'static str],
+    /// The tempo this style is played at when nothing else sets one (R-0042).
+    tempo_bpm: f64,
     /// Grid resolution: a bar has `meter.beats * steps_per_beat` steps.
     steps_per_beat: u32,
     kick: Lane,
@@ -96,6 +105,7 @@ const PRESETS: &[Preset] = &[
     Preset {
         name: "corrido",
         tags: &["corrido", "tumbado", "bélico", "belico", "regional"],
+        tempo_bpm: 105.0,
         steps_per_beat: 2, // eighth-note grid: 6/8 → 12 steps
         kick: Lane {
             min: 0.15,
@@ -120,6 +130,7 @@ const PRESETS: &[Preset] = &[
     Preset {
         name: "trap",
         tags: &["trap", "drill"],
+        tempo_bpm: 140.0,
         steps_per_beat: 4, // sixteenth grid
         kick: Lane {
             min: 0.12,
@@ -144,6 +155,7 @@ const PRESETS: &[Preset] = &[
     Preset {
         name: "metal",
         tags: &["metal", "black metal", "punk", "rock"],
+        tempo_bpm: 160.0,
         steps_per_beat: 4,
         kick: Lane {
             min: 0.25,
@@ -167,6 +179,7 @@ const PRESETS: &[Preset] = &[
     Preset {
         name: "free",
         tags: &[], // fallback only
+        tempo_bpm: 92.0,
         steps_per_beat: 4,
         kick: Lane {
             min: 0.12,
@@ -188,6 +201,23 @@ const PRESETS: &[Preset] = &[
         },
     },
 ];
+
+/// The styles the preset table offers, in priority order, `"free"` last.
+///
+/// For a UI that shows one choice per style: asking the table rather than
+/// hard-coding a list keeps the choices and the patterns from drifting apart,
+/// and each name selects its own preset through [`plan_sound`].
+///
+/// ```
+/// use gooz_model::{parse_intent, plan_sound, style_names};
+///
+/// for style in style_names() {
+///     assert_eq!(plan_sound(&parse_intent(style)).preset, style);
+/// }
+/// ```
+pub fn style_names() -> Vec<&'static str> {
+    PRESETS.iter().map(|preset| preset.name).collect()
+}
 
 /// Turns an intent into a concrete, playable plan.
 ///
@@ -228,6 +258,7 @@ pub fn plan_sound(intent: &MusicalIntent) -> SoundPlan {
 
     SoundPlan {
         tempo_bpm: intent.tempo_bpm,
+        style_bpm: preset.tempo_bpm,
         meter: intent.meter,
         odd_limit: odd_limit_for(intent.tension),
         drive: intent.drive.clamp(0.0, 1.0),

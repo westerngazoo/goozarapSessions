@@ -31,14 +31,16 @@ things next to each other.
 - **AC1 — The track is at the singer's tempo.** Given a take with a pulse and a
   style, the rendered track's bar length matches the take's tempo, not the
   style's default and not a tempo written in the style text.
-- **AC2 — The track starts where the singer starts.** The take's first onset
-  lands on the track's first downbeat. Matching the tempo but not the phase puts
-  the singer up to a beat off the drums, which sounds wrong at any BPM.
+- **AC2 — The singer enters on a downbeat.** The take's first sung note lands
+  on the downbeat of the bar after the one it started in, after at least one
+  bar of drums — a count-in. Matching the tempo but not the phase puts the
+  singer up to a beat off the drums, which sounds wrong at any BPM.
 - **AC3 — The style is audible.** Different styles produce different tracks from
   the same take: the drum patterns are the chosen preset's, not a generic beat.
 - **AC4 — A take with no pulse still gets a track.** When the take says nothing
-  about tempo (a held note, free time), the style's own tempo is used, and the
-  result says so rather than claiming to have followed.
+  about tempo (a held note, free time), the style's own tempo is used — each
+  style has one — and the result says so rather than claiming to have
+  followed.
 - **AC5 — The key is followed and kept.** The take's root is carried in the
   result and in a saved session's settings, so parts that *have* pitch (bass,
   harmony — later requirements) can use it. Drums have no pitch; the result
@@ -79,7 +81,9 @@ None — settled in the decision log.
 | Date | Decision | Rationale |
 |------|----------|-----------|
 | 2026-09-26 | **The voice wins on tempo.** The style's tempo is used only when the take has no pulse | It is the whole point of R-0041. Someone who sings at 120 and asks for "trap a 140" wants a trap track they can sing over, and a track they cannot keep up with is not that. |
-| 2026-09-26 | **The singer's first onset is the downbeat**, done by trimming the take's lead-in rather than shifting the track | Matching tempo without phase leaves the singer up to a beat off the drums. `StemPlacement` places stems by whole bars, so a sub-bar offset cannot be expressed as placement; it has to be in the audio. Trimming the take keeps both stems starting at bar 0, which every existing mix and export path already assumes. The untrimmed take is kept in the session as the recorded `Take`. |
+| 2026-09-27 | **The first sung note enters on a downbeat after a bar of drums — the voice is delayed, not trimmed** (owner decision) | Supersedes the 2026-09-26 trim. `StemPlacement` places stems by whole bars, so the alignment has to be in the audio; delaying it is lossless, needs no guessed pre-roll, and gives a count-in. The earlier row claimed the untrimmed take was kept as a session `Take`; nothing in the product writes one, and with nothing cut there is nothing to keep. |
+| 2026-09-27 | **Each style has its own tempo** (owner decision) | Every style chip gave 92 BPM — Easy Mode's default wearing the style's name. |
+| 2026-09-27 | **Tap to start, tap to stop**, up to 30 s (owner decision) | A fixed 3.5 s capture made every accompaniment a one- or two-bar loop. |
 | 2026-09-26 | **Your voice plus the styled drums — no generated melody over you** | A generated line would compete with the singer for the same space; accompaniment sits *under* a voice. What makes a track feel like it is in your key is bass and harmony, which are the next requirements, not a melody. |
 | 2026-09-26 | **Styles as one-tap chips**, one per preset that exists | Zero typing, and it does not pretend to understand styles the engine has no pattern for. A text box that accepts "bossa nova" and quietly plays the neutral preset would be a small lie in the UI. |
 | 2026-09-26 | **Record, then accompany** — not live | A live track needs tempo tracking on the real-time path, which has its own constraints (CLAUDE.md, real-time audio discipline). Getting the offline version right first also answers what the live version should sound like. |
@@ -87,3 +91,4 @@ None — settled in the decision log.
 ## Changelog
 
 - 2026-09-26 — created, accepted for M8.
+- 2026-09-27 — architect design review round 1 and three owner decisions: count-in, per-style tempos, tap to stop.

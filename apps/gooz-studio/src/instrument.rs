@@ -11,7 +11,7 @@ use gooz_synth::{Distortion, RenderConfig, Sampler, render_sampled_notes};
 
 use crate::pipeline::{bar_samples, pad_to_bars};
 use crate::view::{
-    NoteView, RiffView, WAVE_BUCKETS, easy_mode_grid, easy_mode_tempo, peak_envelope,
+    NoteView, Part, RiffView, WAVE_BUCKETS, easy_mode_grid, easy_mode_tempo, peak_envelope,
 };
 
 /// The octave the recording sits at: degree `1:1` plays it exactly as recorded.
@@ -104,6 +104,8 @@ pub fn instrument_from_take(
         // root has no audible effect on a sampled figure.
         followed_bpm: None,
         followed_root_hz: None,
+        bpm: tempo.bpm(),
+        part: Part::Instrument,
         sample_rate,
         bars,
         seconds: audio.len() as f64 / f64::from(sample_rate),

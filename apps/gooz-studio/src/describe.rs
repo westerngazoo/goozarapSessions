@@ -18,7 +18,7 @@ use gooz_synth::{Pattern, RenderConfig, render_notes};
 
 use crate::DrumKind;
 use crate::beat::{BeatConfig, BeatStem, BeatVoiceSpec, build_beat};
-use crate::view::{BeatView, GRID_ROOT_HZ, NoteView, RiffView, WAVE_BUCKETS, peak_envelope};
+use crate::view::{BeatView, GRID_ROOT_HZ, NoteView, Part, RiffView, WAVE_BUCKETS, peak_envelope};
 
 /// The sample rate generated songs are rendered at.
 const SAMPLE_RATE: u32 = 48_000;
@@ -75,7 +75,22 @@ pub fn describe_song(prompt: &str, bars: u32) -> DescribedSong {
 /// a plan the user edited by hand.
 pub fn song_from_plan(plan: &SoundPlan, bars: u32) -> DescribedSong {
     let bars = bars.max(1);
-    let tempo = tempo_of(plan);
+    let notes = melody_notes(plan, bars);
+    let audio = render_notes(&notes, SAMPLE_RATE, &render_config_for(plan));
+
+    DescribedSong {
+        plan: plan.clone(),
+        riff: riff_view_of(audio, &notes, bars, plan.tempo_bpm),
+        beat: beat_from_plan(plan, bars, SAMPLE_RATE),
+    }
+}
+
+/// The plan's drum lanes, rendered for `bars` bars at the plan's tempo and
+/// meter, at `sample_rate`.
+///
+/// Shared by the describe path and by R-0042's accompaniment, which must render
+/// at the *take's* rate — `export_master` refuses stems whose rates differ.
+pub(crate) fn beat_from_plan(plan: &SoundPlan, bars: u32, sample_rate: u32) -> BeatView {
     let specs = beat_specs_from(plan);
     let cfg = BeatConfig {
         voices: specs.clone(),
@@ -83,20 +98,12 @@ pub fn song_from_plan(plan: &SoundPlan, bars: u32) -> DescribedSong {
     };
     // `build_beat` only rejects an invalid `E(k, n)`, which R-0026 guarantees
     // the plan never contains; an empty stem is the graceful worst case.
-    let stem = build_beat(&tempo, SAMPLE_RATE, &cfg).unwrap_or(BeatStem {
+    let stem = build_beat(&tempo_of(plan), sample_rate, &cfg).unwrap_or(BeatStem {
         samples: Vec::new(),
-        sample_rate: SAMPLE_RATE,
+        sample_rate,
         bars: 0,
     });
-
-    let notes = melody_notes(plan, bars);
-    let audio = render_notes(&notes, SAMPLE_RATE, &render_config_for(plan));
-
-    DescribedSong {
-        plan: plan.clone(),
-        riff: riff_view_of(audio, &notes, bars),
-        beat: BeatView::from_stem(&stem, &specs),
-    }
+    BeatView::from_stem(&stem, &specs)
 }
 
 /// Maps the plan's lanes onto the beat builder's config (AC1).
@@ -212,7 +219,7 @@ fn melody_onsets(plan: &SoundPlan, steps: u32) -> u32 {
 
 /// The plan's tempo as a beat-grid tempo. Falls back to Easy Mode's default when
 /// the plan asks for something the grid rejects (it never should — R-0026 AC5).
-fn tempo_of(plan: &SoundPlan) -> Tempo {
+pub(crate) fn tempo_of(plan: &SoundPlan) -> Tempo {
     Tempo::new(plan.tempo_bpm, f64::from(plan.meter.beats))
         .or_else(|_| Tempo::new(92.0, 4.0))
         .expect("92 BPM / 4 beats-per-bar is always valid")
@@ -227,12 +234,14 @@ fn render_config_for(plan: &SoundPlan) -> RenderConfig {
 }
 
 /// Packages rendered melody audio for the UI, mirroring the hum→riff view.
-fn riff_view_of(samples: Vec<f32>, notes: &[QuantizedNote], bars: u32) -> RiffView {
+fn riff_view_of(samples: Vec<f32>, notes: &[QuantizedNote], bars: u32, bpm: f64) -> RiffView {
     let seconds = samples.len() as f64 / f64::from(SAMPLE_RATE);
     RiffView {
         // A described song follows the prompt, not a take (R-0041).
         followed_bpm: None,
         followed_root_hz: None,
+        bpm,
+        part: Part::Guitar,
         sample_rate: SAMPLE_RATE,
         bars: if samples.is_empty() { 0 } else { bars },
         seconds,
