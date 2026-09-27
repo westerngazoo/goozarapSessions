@@ -110,7 +110,7 @@ body.listening .rec { box-shadow: 0 0 0 1px rgba(255, 45, 111, 0.8), 0 0 90px rg
 .toast.err { color: #f472b6; }
 
 /* mode toggle — what the recording becomes */
-.modes { display: flex; gap: 8px; margin-bottom: 22px; }
+.modes { display: flex; gap: 8px; }
 .mode {
   font-family: inherit; font-size: 10px; letter-spacing: 0.2em; text-transform: uppercase;
   padding: 8px 16px; border-radius: 999px; cursor: pointer;

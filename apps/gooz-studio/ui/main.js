@@ -137,8 +137,11 @@ function showIntroMessage(text) {
 }
 
 // ---- mode toggle ----
+// The modes stay on screen over a result too, so picking one is also the way
+// back from it: to the mic, in the mode picked.
 function setMode(next) {
-  if (busy || !MODES[next]) return;
+  if (busy || recording || !MODES[next]) return;
+  reset();
   mode = next;
   const copy = MODES[mode];
   document.getElementById("prompt").innerHTML =
@@ -333,6 +336,7 @@ function showResult(data, heading) {
   document.getElementById("intro").classList.add("hidden");
   document.getElementById("result").classList.remove("hidden");
 }
+// Back to the mic, in the current mode.
 function reset() {
   stopAudio();
   if (track) {
