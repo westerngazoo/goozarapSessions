@@ -99,9 +99,12 @@ its typed error on the intro screen, where the user can simply record again.
 Hum mode keeps R-0013's graceful fallback.
 
 
-A mode toggle next to the record button — *tararear* (today's hum→riff) and
-*mi instrumento* (this). Everything downstream is untouched: the same waveform
-canvas, note cards, play loop, save session, export WAV.
+A mode toggle — *tararear* (today's hum→riff) and *mi instrumento* (this) —
+in the top bar, on screen with every result. Picking a mode from a result
+discards it and returns to the mic in that mode; the result's own exit,
+"← volver", returns to the mic in the same one. Everything downstream is
+untouched: the same waveform canvas, note cards, play loop, save session,
+export WAV.
 
 ## 3. Non-goals
 
@@ -130,6 +133,7 @@ None.
 
 | Date | Decision | Rationale |
 |------|----------|-----------|
+| 2026-09-27 | The mode toggle moves to the top bar and doubles as the way back from a result (owner decision) | A result hid the toggle and offered only "↺ redo", which the owner did not read as a way back. See R-0040's decision log. |
 | 2026-09-13 | `Distortion::Bypass`, not the guitar's default drive | R-0039 added the bypass curve precisely so a recording can come back as it was played. Defaulting to saturation here would undo that on the one path where the user's own sound is the point. |
 | 2026-09-13 | The empty-take check lives in this layer, not in `Sampler` | They are different questions: an empty *instrument* is silence and legal (R-0039 AC5); an empty *take* means the recording failed and the user needs to know. |
 | 2026-09-13 | `easy_mode_grid` / `easy_mode_tempo` are shared, not copied | Two modes reading two definitions of Easy Mode would drift, and the slider would stop meaning one thing. |
@@ -138,3 +142,4 @@ None.
 
 - 2026-09-13 — created; proposed for architect review.
 - 2026-09-26 — architect review round 1: take trimming, one-beat cap, silence as an error, bar padding, honest cards, UI error path. The review came after implementation; that ordering is noted here rather than hidden.
+- 2026-09-27 — the mode toggle moves to the top bar; a mode picked from a result goes back to the mic; "↺ redo" becomes "← volver" (owner decision).
