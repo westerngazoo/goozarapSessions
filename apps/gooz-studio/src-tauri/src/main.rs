@@ -1,7 +1,8 @@
 //! goozarapSessions Easy Mode desktop shell (Tauri) — R-0013 v0.
 //!
 //! A thin bridge: the commands call `gooz_studio`'s tested backend
-//! ([`gooz_studio::demo_riff`], [`gooz_studio::riff_from_take`]) and use
+//! ([`gooz_studio::demo_riff`], [`gooz_studio::riff_from_take`],
+//! [`gooz_studio::instrument_from_take`]) and use
 //! `gooz_audio` for microphone capture. All music logic lives in the reviewed
 //! crates; this crate only connects them to the webview. It is not part of the
 //! workspace merge gate — build with `cargo tauri dev` (or `cargo run`) on a
@@ -18,7 +19,8 @@ use std::path::PathBuf;
 use gooz_audio::{AudioBackend, CpalBackend, Engine};
 use gooz_studio::{
     BeatView, RiffView, beat_view as beat_view_impl, demo_riff as demo_riff_view,
-    export_master as export_master_impl, riff_from_take, save_session as save_session_impl,
+    export_master as export_master_impl, instrument_from_take, riff_from_take,
+    save_session as save_session_impl,
 };
 use tauri::State;
 
@@ -112,10 +114,10 @@ fn record_start(recorder: State<'_, Recorder>) -> Result<(), String> {
     Ok(())
 }
 
-/// Stops capture, runs the Easy Mode pipeline on the take at the given
-/// smooth↔tense setting, and returns the riff.
-#[tauri::command]
-fn record_stop_analyze(recorder: State<'_, Recorder>, tense: u8) -> Result<RiffView, String> {
+/// Stops capture and hands back the take.
+///
+/// Shared by the two stop commands: one recording, two ways to hear it back.
+fn stop_and_take(recorder: &State<'_, Recorder>) -> Result<(Vec<f32>, u32), String> {
     let capture = recorder
         .0
         .lock()
@@ -123,11 +125,26 @@ fn record_stop_analyze(recorder: State<'_, Recorder>, tense: u8) -> Result<RiffV
         .take()
         .ok_or("not recording")?;
     capture.stop.store(true, Ordering::Relaxed);
-    let (samples, sample_rate) = capture
+    capture
         .handle
         .join()
-        .map_err(|_| "recording thread panicked".to_string())??;
+        .map_err(|_| "recording thread panicked".to_string())?
+}
+
+/// Stops capture, runs the Easy Mode hum→riff pipeline on the take at the given
+/// smooth↔tense setting, and returns the riff.
+#[tauri::command]
+fn record_stop_analyze(recorder: State<'_, Recorder>, tense: u8) -> Result<RiffView, String> {
+    let (samples, sample_rate) = stop_and_take(&recorder)?;
     riff_from_take(&samples, sample_rate, tense).map_err(|e| e.to_string())
+}
+
+/// Stops capture and plays the take back across the ratio grid — the recording
+/// becomes the instrument (R-0040).
+#[tauri::command]
+fn record_stop_instrument(recorder: State<'_, Recorder>, tense: u8) -> Result<RiffView, String> {
+    let (samples, sample_rate) = stop_and_take(&recorder)?;
+    instrument_from_take(&samples, sample_rate, tense).map_err(|e| e.to_string())
 }
 
 fn main() {
@@ -139,7 +156,8 @@ fn main() {
             save_session,
             export_master,
             record_start,
-            record_stop_analyze
+            record_stop_analyze,
+            record_stop_instrument
         ])
         .run(tauri::generate_context!())
         .expect("error while running the goozarapSessions shell");

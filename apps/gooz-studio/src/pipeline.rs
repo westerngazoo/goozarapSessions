@@ -87,26 +87,37 @@ pub fn hum_to_riff(
     let notes = quantize_notes(&transcription.notes, pitch_grid, tempo, cfg.subdivision);
     let raw = render_notes(&notes, sample_rate, &cfg.render);
 
-    let bar_samples = ((tempo.bar_seconds() * f64::from(sample_rate)).round() as usize).max(1);
-    let stem = if raw.is_empty() {
-        RiffStem {
-            samples: Vec::new(),
-            sample_rate,
-            bars: 0,
-        }
-    } else {
-        let bars = raw.len().div_ceil(bar_samples);
-        let mut samples = raw;
-        samples.resize(bars * bar_samples, 0.0); // padding only — len >= raw, tails preserved
-        RiffStem {
-            samples,
-            sample_rate,
-            bars: bars as u32,
-        }
+    let mut samples = raw;
+    let bars = pad_to_bars(&mut samples, bar_samples(tempo, sample_rate));
+    let stem = RiffStem {
+        samples,
+        sample_rate,
+        bars,
     };
     Ok(RiffOutcome {
         stem,
         notes,
         transcription,
     })
+}
+
+/// One bar of `tempo`, in samples at `sample_rate` (at least one).
+pub(crate) fn bar_samples(tempo: &Tempo, sample_rate: u32) -> usize {
+    ((tempo.bar_seconds() * f64::from(sample_rate)).round() as usize).max(1)
+}
+
+/// Pads `samples` with silence to a whole number of bars and returns how many.
+///
+/// The rule every loop in the studio shares: `samples.len() == bars ·
+/// bar_samples`, and an empty buffer is zero bars. A loop that is not a whole
+/// number of bars drifts against the beat on every repeat, and the mixdown —
+/// which wraps each stem by its own length — replays its start mid-bar.
+/// Padding only: nothing is cut, so ring tails survive.
+pub(crate) fn pad_to_bars(samples: &mut Vec<f32>, bar_samples: usize) -> u32 {
+    if samples.is_empty() {
+        return 0;
+    }
+    let bars = samples.len().div_ceil(bar_samples.max(1));
+    samples.resize(bars * bar_samples.max(1), 0.0);
+    bars as u32
 }

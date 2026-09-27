@@ -17,21 +17,26 @@
     <main class="stage">
       <!-- first run -->
       <section id="intro" class="intro">
-        <p class="prompt">hum something<span class="cursor">_</span></p>
+        <div id="modes" class="modes" role="radiogroup" aria-label="what to do with the recording">
+          <button class="mode is-on" role="radio" aria-checked="true" data-mode="hum">tararear</button>
+          <button class="mode" role="radio" aria-checked="false" data-mode="instrument">mi instrumento</button>
+        </div>
+        <p id="prompt" class="prompt">hum something<span class="cursor">_</span></p>
         <button id="recBtn" class="rec" aria-label="record">
           <span class="ring"></span>
           <span class="dot"></span>
           <span class="label">hum</span>
         </button>
-        <p class="hint">
+        <p id="hint" class="hint">
           tap &amp; hum a melody — no theory, just a sound.
           <a href="#" id="demoLink">or hear a demo ▶</a>
         </p>
+        <p id="introMsg" class="toast err hidden" role="alert"></p>
       </section>
 
       <!-- result -->
       <section id="result" class="result hidden">
-        <h2 class="heard">esto escuché</h2>
+        <h2 id="heard" class="heard">esto escuché</h2>
         <div id="notes" class="notes"></div>
         <div class="wavewrap">
           <canvas id="wave" width="1100" height="220"></canvas>

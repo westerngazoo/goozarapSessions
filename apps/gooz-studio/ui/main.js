@@ -11,10 +11,82 @@ let node = null;
 let playing = false;
 let busy = false;
 
+// What the recording becomes: "hum" runs the hum→riff pipeline (R-0008),
+// "instrument" plays the take back across the ratio grid (R-0040).
+let mode = "hum";
+
+const MODES = {
+  hum: {
+    prompt: "hum something",
+    hint: "tap &amp; hum a melody — no theory, just a sound.",
+    label: "hum",
+    heard: "esto escuché",
+    stop: "record_stop_analyze",
+    // Hum mode keeps R-0013's graceful fallback to the demo riff.
+    demo: true,
+  },
+  instrument: {
+    prompt: "make any sound",
+    hint: "tap &amp; hit the table, click, knock — it becomes your instrument.",
+    label: "sound",
+    heard: "tu instrumento",
+    stop: "record_stop_instrument",
+    // No demo here: the hum demo is a guitar built from a synthetic hum, and
+    // showing it under "tu instrumento" would be showing someone else's sound.
+    demo: false,
+  },
+};
+
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
 function tenseValue() {
   return Number(document.getElementById("tenseRng").value);
+}
+
+function onDemo(e) {
+  e.preventDefault();
+  if (busy) return;
+  busy = true;
+  setModesEnabled(false);
+  demo()
+    .then((data) => showResult(data, MODES.hum.heard))
+    .finally(() => {
+      busy = false;
+      setModesEnabled(true);
+    });
+}
+
+// The mode can only change while nothing is in flight: a result must be labelled
+// by the mode that produced it, not by whichever pill was tapped since.
+function setModesEnabled(on) {
+  for (const btn of document.querySelectorAll(".mode")) btn.disabled = !on;
+}
+
+// Something went wrong with a take: say so, on the screen the user is looking at.
+function showIntroMessage(text) {
+  const el = document.getElementById("introMsg");
+  el.textContent = text;
+  el.classList.toggle("hidden", !text);
+}
+
+// ---- mode toggle ----
+function setMode(next) {
+  if (busy || !MODES[next]) return;
+  mode = next;
+  const copy = MODES[mode];
+  document.getElementById("prompt").innerHTML =
+    `${copy.prompt}<span class="cursor">_</span>`;
+  document.getElementById("hint").innerHTML = copy.demo
+    ? `${copy.hint} <a href="#" id="demoLink">or hear a demo ▶</a>`
+    : copy.hint;
+  if (copy.demo) document.getElementById("demoLink").addEventListener("click", onDemo);
+  document.getElementById("recBtn").querySelector(".label").textContent = copy.label;
+  showIntroMessage("");
+  for (const btn of document.querySelectorAll(".mode")) {
+    const on = btn.dataset.mode === mode;
+    btn.classList.toggle("is-on", on);
+    btn.setAttribute("aria-checked", String(on));
+  }
 }
 
 async function demo() {
@@ -27,24 +99,37 @@ async function demo() {
 async function onRecord() {
   if (busy) return;
   busy = true;
+  setModesEnabled(false);
+  showIntroMessage("");
+  // Captured now, so the result is labelled by the mode that recorded it.
+  const copy = MODES[mode];
   const rec = document.getElementById("recBtn");
   document.body.classList.add("listening");
   rec.querySelector(".label").textContent = "listening…";
   try {
     if (invoke) {
       await invoke("record_start");
-      await wait(3500); // ~3.5s to hum a melody
-      showResult(await invoke("record_stop_analyze", { tense: tenseValue() }));
-    } else {
+      await wait(3500); // ~3.5s to hum a melody or make a sound
+      showResult(await invoke(copy.stop, { tense: tenseValue() }), copy.heard);
+    } else if (copy.demo) {
       await wait(1500);
-      showResult(await demo());
+      showResult(await demo(), copy.heard);
+    } else {
+      showIntroMessage("recording needs the desktop app — there is no microphone here");
     }
-  } catch (_) {
-    showResult(await demo()); // graceful fallback
+  } catch (err) {
+    if (copy.demo) {
+      showResult(await demo(), copy.heard); // R-0013's graceful fallback
+    } else {
+      // A typed error from the take — silence, a clipped mic, a corrupt sample.
+      // The user can fix any of those by recording again, if they are told.
+      showIntroMessage(`that take didn't work: ${err}`);
+    }
   } finally {
     document.body.classList.remove("listening");
-    rec.querySelector(".label").textContent = "hum";
+    rec.querySelector(".label").textContent = MODES[mode].label;
     busy = false;
+    setModesEnabled(true);
   }
 }
 
@@ -57,12 +142,16 @@ function noteCard(nt) {
   const el = document.createElement("div");
   el.className = "card";
   el.style.setProperty("--c", consonanceColor(nt.num, nt.den));
-  const cents = (nt.cents >= 0 ? "+" : "") + Math.round(nt.cents);
   const oct = nt.octave ? ` · 8ve ${nt.octave > 0 ? "+" : ""}${nt.octave}` : "";
+  // A sampled card has no pitch: the sound was moved by a ratio, and nothing
+  // measured what pitch it started at. Show only what is known.
+  const hz = nt.hz == null ? "" : `<div class="hz">${Math.round(nt.hz)} Hz</div>`;
+  const cents =
+    nt.cents == null ? "" : `${nt.cents >= 0 ? "+" : ""}${Math.round(nt.cents)}¢`;
   el.innerHTML =
     `<div class="ratio">${nt.num}<span>:</span>${nt.den}</div>` +
-    `<div class="hz">${Math.round(nt.hz)} Hz</div>` +
-    `<div class="cents">${cents}¢${oct}</div>`;
+    hz +
+    `<div class="cents">${cents}${oct}</div>`;
   return el;
 }
 function drawWave(data) {
@@ -97,8 +186,9 @@ function drawWave(data) {
   ctx.globalAlpha = 1;
   ctx.shadowBlur = 0;
 }
-function showResult(data) {
+function showResult(data, heading) {
   current = data;
+  document.getElementById("heard").textContent = heading;
   const nn = document.getElementById("notes");
   nn.innerHTML = "";
   data.notes.forEach((nt, i) => {
@@ -311,7 +401,10 @@ async function saveOrExport(cmd, label) {
 
 // ---- wire ----
 document.getElementById("recBtn").addEventListener("click", onRecord);
-document.getElementById("demoLink").addEventListener("click", (e) => { e.preventDefault(); demo().then(showResult); });
+document.getElementById("demoLink").addEventListener("click", onDemo);
+for (const btn of document.querySelectorAll(".mode")) {
+  btn.addEventListener("click", () => setMode(btn.dataset.mode));
+}
 document.getElementById("playBtn").addEventListener("click", togglePlay);
 document.getElementById("redoBtn").addEventListener("click", reset);
 document.getElementById("beatBtn").addEventListener("click", toggleBeat);
