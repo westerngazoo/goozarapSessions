@@ -9,6 +9,9 @@ let current = null;
 let audioCtx = null;
 let node = null;
 let playing = false;
+// A play tap waiting for the audio context: a second tap must not start a
+// second loop that nothing can stop.
+let starting = false;
 let busy = false;
 
 // What the recording becomes: "hum" runs the hum→riff pipeline (R-0008),
@@ -310,6 +313,7 @@ function drawWave(data) {
 }
 function showResult(data, heading) {
   current = data;
+  document.getElementById("toast").classList.add("hidden");
   document.getElementById("heard").textContent = heading;
   const nn = document.getElementById("notes");
   nn.innerHTML = "";
@@ -381,11 +385,18 @@ async function togglePlay() {
     if (track) stopBeat();
     return stopAudio();
   }
+  if (starting) return;
+  const wanted = current;
   audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
-  await audioCtx.resume();
-  // The first resume can take a moment; if the result was left meanwhile, there
-  // is nothing on screen to play or to stop.
-  if (document.getElementById("result").classList.contains("hidden")) return;
+  starting = true;
+  try {
+    await audioCtx.resume();
+  } finally {
+    starting = false;
+  }
+  // The first resume can take a moment; a result left or replaced meanwhile is
+  // not the one the tap asked to play.
+  if (current !== wanted || document.getElementById("result").classList.contains("hidden")) return;
   let buf;
   if (current.samples && current.samples.length) {
     buf = audioCtx.createBuffer(1, current.samples.length, current.sampleRate);
@@ -556,11 +567,14 @@ async function saveOrExport(cmd, label) {
     riff: current || null,
     beat: lastBeat || null,
   };
+  // A save that finishes after its result was replaced reports under a
+  // result it did not save, so it says nothing.
+  const saving = current;
   try {
     const path = await invoke(cmd, args);
-    toast(label + " → " + path);
+    if (current === saving) toast(label + " → " + path);
   } catch (e) {
-    toast(label + " failed: " + e, false);
+    if (current === saving) toast(label + " failed: " + e, false);
   }
 }
 

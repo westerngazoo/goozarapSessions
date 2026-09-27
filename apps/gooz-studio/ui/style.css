@@ -155,7 +155,5 @@ body.listening .rec { box-shadow: 0 0 0 1px rgba(255, 45, 111, 0.8), 0 0 90px rg
 
 @media (max-width: 640px) { .prompt { font-size: 26px; } .rec { width: 150px; height: 150px; } }
 
-/* Last, so it wins over every component's own `display` at equal specificity.
-   It used to cover only the intro and the result: the style chips, the save
-   message and the intro's error message ignored it and never hid. */
+/* Last, so it wins over every component's own `display` at equal specificity. */
 .hidden { display: none; }

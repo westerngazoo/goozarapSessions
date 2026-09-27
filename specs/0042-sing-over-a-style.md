@@ -186,8 +186,8 @@ has a 180 Hz body), so the UI must not say the track is "en tu tono".
   `styles()` returning the preset ids, so the chips are the preset table and
   cannot drift from it.
 - A third mode, *sobre un estilo* (the modes live in the top bar and are the
-  way back from a result since the SPEC-0040 amendment of 2026-09-27), shows the chips (fetched once, retried if
-  the request fails, never duplicated). The result plays voice and track from
+  way back from a result since the SPEC-0040 amendment of 2026-09-27), shows
+  the chips (fetched once, retried if the request fails, never duplicated). The result plays voice and track from
   **one** play button, both started at the same `AudioContext` time with loops
   of equal length. While a styled track is the beat, the busy slider and the
   beat button are **disabled**: either would restart the drums alone "now" while
@@ -252,3 +252,4 @@ None.
 - 2026-09-26 — created; proposed for architect review.
 - 2026-09-27 — implementation review (architect: request changes) and QA (FAIL on AC2): anchor rebuilt as `first_sung_note`, exactly one bar in, mono capture, `beats_per_bar`, locked playback, async stop commands.
 - 2026-09-27 — architect round 1 (request changes: anchor, stem invariants, a requirement contradiction, a coincidental clock, a style tempo that did not exist, vacuous test mappings) and three owner decisions: count-in, per-style tempos, tap to stop.
+- 2026-09-27 — cross-reference: the mode toggle moved to the top bar (SPEC-0040 amendment).
