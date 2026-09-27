@@ -109,6 +109,21 @@ body.listening .rec { box-shadow: 0 0 0 1px rgba(255, 45, 111, 0.8), 0 0 90px rg
 .toast { margin-top: 12px; font-size: 12px; letter-spacing: 0.04em; color: var(--cyan); word-break: break-all; }
 .toast.err { color: #f472b6; }
 
+/* mode toggle — what the recording becomes */
+.modes { display: flex; gap: 8px; margin-bottom: 22px; }
+.mode {
+  font-family: inherit; font-size: 10px; letter-spacing: 0.2em; text-transform: uppercase;
+  padding: 8px 16px; border-radius: 999px; cursor: pointer;
+  border: 1px solid var(--line); background: transparent; color: var(--dim);
+  transition: color 0.15s, border-color 0.15s, box-shadow 0.15s;
+}
+.mode:hover { color: var(--text); }
+.mode:disabled { opacity: 0.4; cursor: not-allowed; }
+.mode.is-on {
+  color: var(--violet); border-color: var(--violet);
+  box-shadow: 0 0 18px rgba(168, 85, 247, 0.25);
+}
+
 /* sliders footer */
 .sliders {
   position: relative; z-index: 1; display: flex; gap: 34px; justify-content: center;

@@ -47,7 +47,7 @@ fn ac7_a_take_gets_a_riff_in_its_own_key() {
     let lowest = view
         .notes
         .iter()
-        .map(|n| n.hz)
+        .map(|n| n.hz.expect("a sung note has a pitch"))
         .fold(f64::INFINITY, f64::min);
     assert!(
         cents_apart(lowest, 260.0) < 40.0,
@@ -129,7 +129,14 @@ fn ac7_the_demo_did_not_move() {
     let heard: Vec<(u64, u64, i32, f64)> = view
         .notes
         .iter()
-        .map(|n| (n.num, n.den, n.octave, n.hz))
+        .map(|n| {
+            (
+                n.num,
+                n.den,
+                n.octave,
+                n.hz.expect("a sung note has a pitch"),
+            )
+        })
         .collect();
     assert_eq!(
         heard,
@@ -202,11 +209,11 @@ fn ac7_a_take_that_said_nothing_gets_easy_modes_own_grid_and_clock() {
     assert_eq!(view.followed_root_hz, None, "0.15 s reported a key");
     assert!(!view.notes.is_empty(), "nothing was heard");
     for note in &view.notes {
+        let hz = note.hz.expect("a sung note has a pitch");
         let on_grid = 220.0 * note.num as f64 / note.den as f64 * 2f64.powi(note.octave);
         assert!(
-            (note.hz / on_grid - 1.0).abs() < 1e-9,
-            "{:.1} Hz is not on Easy Mode's 220 Hz grid",
-            note.hz
+            (hz / on_grid - 1.0).abs() < 1e-9,
+            "{hz:.1} Hz is not on Easy Mode's 220 Hz grid"
         );
     }
     let bpm = laid_out_bpm(&view);
@@ -234,11 +241,11 @@ fn ac7_what_the_view_says_it_followed_is_what_the_riff_was_built_on() {
     );
     assert!(!view.notes.is_empty(), "nothing was heard");
     for note in &view.notes {
-        let grid_root = note.hz / (note.num as f64 / note.den as f64 * 2f64.powi(note.octave));
+        let hz = note.hz.expect("a sung note has a pitch");
+        let grid_root = hz / (note.num as f64 / note.den as f64 * 2f64.powi(note.octave));
         assert!(
             (grid_root / root - 1.0).abs() < 1e-9,
-            "a {:.1} Hz note sits on a grid rooted at {grid_root:.3} Hz, not the reported {root:.3}",
-            note.hz
+            "a {hz:.1} Hz note sits on a grid rooted at {grid_root:.3} Hz, not the reported {root:.3}"
         );
     }
 }
@@ -279,10 +286,10 @@ fn ac7_the_demo_did_not_move_in_time_either() {
         "the demo's notes changed"
     );
     for (note, want) in view.notes.iter().zip(golden_cents) {
+        let cents = note.cents.expect("a hummed tone was offset from a pitch");
         assert!(
-            (note.cents - want).abs() < 1e-3,
-            "a hummed tone was snapped by {:.6} cents, not {want:.6}",
-            note.cents
+            (cents - want).abs() < 1e-3,
+            "a hummed tone was snapped by {cents:.6} cents, not {want:.6}"
         );
     }
 

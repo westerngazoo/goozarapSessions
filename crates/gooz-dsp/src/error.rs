@@ -24,6 +24,8 @@ pub enum DspError {
     OutputTooLong,
     /// A sample lies outside the `[-1, 1]` range audio is carried in.
     SampleOutOfRange,
+    /// The recording holds no sound: nothing rises above the silence floor.
+    Silent,
 }
 
 impl fmt::Display for DspError {
@@ -39,6 +41,7 @@ impl fmt::Display for DspError {
             DspError::SampleOutOfRange => {
                 "a sample lies outside the [-1, 1] range audio is carried in"
             }
+            DspError::Silent => "the recording is silent: nothing rose above the noise floor",
         };
         f.write_str(message)
     }
