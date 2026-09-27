@@ -185,7 +185,8 @@ has a 180 Hz body), so the UI must not say the track is "en tu tono".
 - `record_stop_accompany(tense, style)` beside the other two stop commands, and
   `styles()` returning the preset ids, so the chips are the preset table and
   cannot drift from it.
-- A third mode, *sobre un estilo*, shows the chips (fetched once, retried if
+- A third mode, *sobre un estilo* (the modes live in the top bar and are the
+  way back from a result since the SPEC-0040 amendment of 2026-09-27), shows the chips (fetched once, retried if
   the request fails, never duplicated). The result plays voice and track from
   **one** play button, both started at the same `AudioContext` time with loops
   of equal length. While a styled track is the beat, the busy slider and the

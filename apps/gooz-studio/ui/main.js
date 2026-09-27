@@ -140,7 +140,7 @@ function showIntroMessage(text) {
 // The modes stay on screen over a result too, so picking one is also the way
 // back from it: to the mic, in the mode picked.
 function setMode(next) {
-  if (busy || recording || !MODES[next]) return;
+  if (busy || !MODES[next]) return;
   reset();
   mode = next;
   const copy = MODES[mode];
@@ -336,9 +336,11 @@ function showResult(data, heading) {
   document.getElementById("intro").classList.add("hidden");
   document.getElementById("result").classList.remove("hidden");
 }
-// Back to the mic, in the current mode.
+// Back to the mic, in the current mode. A save/export message belonged to the
+// result being left, so it goes with it.
 function reset() {
   stopAudio();
+  document.getElementById("toast").classList.add("hidden");
   if (track) {
     stopBeat();
     track = null;
@@ -381,6 +383,9 @@ async function togglePlay() {
   }
   audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
   await audioCtx.resume();
+  // The first resume can take a moment; if the result was left meanwhile, there
+  // is nothing on screen to play or to stop.
+  if (document.getElementById("result").classList.contains("hidden")) return;
   let buf;
   if (current.samples && current.samples.length) {
     buf = audioCtx.createBuffer(1, current.samples.length, current.sampleRate);

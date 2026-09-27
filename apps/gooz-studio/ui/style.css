@@ -34,13 +34,14 @@ body {
 }
 .topbar {
   position: relative; z-index: 1;
-  display: flex; justify-content: space-between; align-items: center;
+  /* Three columns so the modes sit on the window's centre line, with the stage. */
+  display: grid; grid-template-columns: 1fr auto 1fr; align-items: center;
   padding: 20px 28px;
 }
 .wordmark { font-weight: 700; letter-spacing: 0.12em; font-size: 15px; text-transform: lowercase; }
 .wordmark span { color: var(--pink); text-shadow: var(--glow) var(--pink); }
 .wordmark em { display: block; font-style: normal; font-size: 9px; letter-spacing: 0.5em; color: var(--dim); margin-top: 3px; }
-.session-tag { font-size: 11px; letter-spacing: 0.25em; color: var(--dim); border: 1px solid var(--line); padding: 6px 12px; border-radius: 999px; }
+.session-tag { justify-self: end; font-size: 11px; letter-spacing: 0.25em; color: var(--dim); border: 1px solid var(--line); padding: 6px 12px; border-radius: 999px; }
 .session-tag b { color: var(--cyan); text-shadow: var(--glow) var(--cyan); }
 
 .stage {
@@ -78,7 +79,6 @@ body.listening .rec { box-shadow: 0 0 0 1px rgba(255, 45, 111, 0.8), 0 0 90px rg
 
 /* result */
 .result { width: min(1100px, 94vw); display: flex; flex-direction: column; gap: 20px; }
-.result.hidden, .intro.hidden { display: none; }
 .heard { margin: 0; font-size: 12px; letter-spacing: 0.4em; text-transform: uppercase; color: var(--dim); }
 .notes { display: flex; gap: 14px; flex-wrap: wrap; }
 .card {
@@ -121,7 +121,7 @@ body.listening .rec { box-shadow: 0 0 0 1px rgba(255, 45, 111, 0.8), 0 0 90px rg
 .mode:disabled { opacity: 0.4; cursor: not-allowed; }
 
 /* style chips — one per preset the engine has a pattern for */
-.styles { display: flex; gap: 8px; margin: -8px 0 20px; flex-wrap: wrap; justify-content: center; }
+.styles { display: flex; gap: 8px; margin: 0 0 20px; flex-wrap: wrap; justify-content: center; }
 .style-chip {
   font-family: inherit; font-size: 11px; letter-spacing: 0.12em; text-transform: lowercase;
   padding: 7px 14px; border-radius: 999px; cursor: pointer;
@@ -154,3 +154,8 @@ body.listening .rec { box-shadow: 0 0 0 1px rgba(255, 45, 111, 0.8), 0 0 90px rg
 .beatlanes { font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--dim); }
 
 @media (max-width: 640px) { .prompt { font-size: 26px; } .rec { width: 150px; height: 150px; } }
+
+/* Last, so it wins over every component's own `display` at equal specificity.
+   It used to cover only the intro and the result: the style chips, the save
+   message and the intro's error message ignored it and never hid. */
+.hidden { display: none; }

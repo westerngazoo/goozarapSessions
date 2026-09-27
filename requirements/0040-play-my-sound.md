@@ -54,8 +54,9 @@ owner asked to see when they asked for scales.
 - **AC6 — Deterministic and bounded.** The same take and setting always produce
   identical audio; output is finite and within `[-1, 1]`.
 - **AC7 — Reachable from the app.** The shell exposes it as a command, and the
-  UI offers it next to the existing record button, reusing the existing
-  playback, waveform, save, and export paths.
+  UI offers it as a mode that stays on screen with every result (amended
+  2026-09-27, see the decision log), reusing the existing playback, waveform,
+  save, and export paths.
 - **AC8 — Tests, docs, gates.** The library path is deviceless and fully tested;
   every public item documented; all four toolchain gates green.
 
@@ -88,6 +89,7 @@ None — settled in the decision log.
 | 2026-09-26 | **A sampled card shows the ratio and no pitch** | Degree `1:1` is whatever pitch the recording had, which nothing measured; a card saying "330 Hz" under a knock stated a number that is not what sounds. `NoteView::hz` / `cents` are `Option`s. |
 | 2026-09-26 | **Refuse** a sample outside `[-1, 1]`, rather than clamp | `Sampler` holds audio (R-0039). A hot device sample fails this mode while hum mode accepts it; the difference is that this mode *plays the samples back*. |
 | 2026-09-26 | **Neither the take's key nor its tempo is followed here** | Architect review of R-0041's interaction: a single knock has no pulse under R-0041's own gates, and the grid root has no audible effect on a sampled figure (degrees are ratios; the sampler ignores Hz). The figure should run on the *session* clock; until there is one, 92 BPM is it. |
+| 2026-09-27 | **The modes stay on screen, and picking one from a result goes back to the mic** (owner decision, "arreglo rápido ahora") | The owner entered *mi instrumento* and could not find the way back. The modes lived inside the intro, so a result hid them, and its only exit, "↺ redo", reads as "record again". The pills now sit in the top bar, a pill on a result discards it and returns to the mic in that mode, and the exit says "← volver". Results were never kept, so nothing is lost that was kept before. This amends AC7's "next to the record button". |
 | 2026-09-13 | The figure is **the grid itself, ascending** — one hit per degree | It is the shortest path from "I hit the table" to "that is an instrument", it needs no second recording, and it literally demonstrates what the owner asked for: the sound moved across the scale. A generated melody would be prettier and would hide what is being shown. |
 | 2026-09-13 | The recording's **root octave is the octave the figure starts at**, passed explicitly | R-0039's blocking finding was that an implicit register is a bug waiting to happen. The caller states it; nothing is inferred. |
 | 2026-09-13 | Returns the existing `RiffView`, not a new type | The shell already plays, draws, saves, and exports a `RiffView`. A parallel type would duplicate all four paths to say the same thing. |
