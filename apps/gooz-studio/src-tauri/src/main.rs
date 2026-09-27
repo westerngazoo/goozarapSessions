@@ -47,8 +47,8 @@ fn demo_riff() -> RiffView {
 
 /// Builds an Easy-Mode beat at the given sparse↔busy density (`0..=100`).
 #[tauri::command]
-fn beat(busy: u8) -> BeatView {
-    beat_view_impl(busy)
+fn beat(busy: u8, bpm: Option<f64>) -> BeatView {
+    beat_view_impl(busy, bpm)
 }
 
 /// Where sessions and exports are written: `~/goozarapSessions` (falling back to

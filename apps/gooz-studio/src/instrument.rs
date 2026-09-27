@@ -99,6 +99,11 @@ pub fn instrument_from_take(
     );
     let bars = pad_to_bars(&mut audio, bar_samples(&tempo, sample_rate));
     Ok(RiffView {
+        // This path does not listen to the take for tempo or key (R-0040's
+        // decision log): the figure runs on Easy Mode's clock, and the grid
+        // root has no audible effect on a sampled figure.
+        followed_bpm: None,
+        followed_root_hz: None,
         sample_rate,
         bars,
         seconds: audio.len() as f64 / f64::from(sample_rate),

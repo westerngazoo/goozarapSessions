@@ -4,7 +4,7 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
-use gooz_dsp::{Config, NoteEvent, analyze};
+use gooz_dsp::{Config, NoteEvent, analyze, tempo_of};
 use gooz_ratio::PitchGrid;
 
 use crate::error::ModelError;
@@ -76,7 +76,7 @@ pub fn extract_features(
         format_version: FEATURE_FORMAT_VERSION,
         sample_rate,
         duration_secs,
-        tempo_bpm: estimate_bpm(&onset_times),
+        tempo_bpm: tempo_of(samples, sample_rate).unwrap_or(0.0),
         onset_density,
         rms: rms(samples),
         brightness: zero_crossing_rate(samples),
@@ -104,23 +104,6 @@ pub(crate) fn zero_crossing_rate(samples: &[f32]) -> f64 {
         .filter(|w| (w[0] >= 0.0) != (w[1] >= 0.0))
         .count();
     crossings as f64 / (samples.len() - 1) as f64
-}
-
-/// Estimates tempo from onset times: `60 / median(inter-onset interval)`.
-/// Returns `0.0` for fewer than two onsets or a non-positive median interval.
-pub(crate) fn estimate_bpm(onset_times: &[f64]) -> f64 {
-    if onset_times.len() < 2 {
-        return 0.0;
-    }
-    let mut iois: Vec<f64> = onset_times.windows(2).map(|w| w[1] - w[0]).collect();
-    iois.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-    let mid = iois.len() / 2;
-    let median = if iois.len().is_multiple_of(2) {
-        (iois[mid - 1] + iois[mid]) / 2.0
-    } else {
-        iois[mid]
-    };
-    if median > 0.0 { 60.0 / median } else { 0.0 }
 }
 
 /// Builds the duration-weighted, grid-snapped ratio histogram, normalized to sum
@@ -173,15 +156,5 @@ mod tests {
         assert!((zero_crossing_rate(&[1.0, -1.0, 1.0, -1.0]) - 1.0).abs() < 1e-12);
         // all positive → 0 crossings
         assert_eq!(zero_crossing_rate(&[0.1, 0.2, 0.3]), 0.0);
-    }
-
-    #[test]
-    fn estimate_bpm_from_regular_onsets() {
-        // Onsets every 0.5 s → 120 BPM.
-        let onsets = [0.0, 0.5, 1.0, 1.5, 2.0];
-        assert!((estimate_bpm(&onsets) - 120.0).abs() < 1e-9);
-        // Fewer than two onsets → 0.
-        assert_eq!(estimate_bpm(&[0.3]), 0.0);
-        assert_eq!(estimate_bpm(&[]), 0.0);
     }
 }

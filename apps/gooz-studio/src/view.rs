@@ -9,12 +9,14 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
-use gooz_dsp::{DspError, PitchGrid, QuantizedNote, Tempo};
+use gooz_dsp::{
+    DspError, Follow, MAX_BPM, MIN_BPM, PitchGrid, QuantizedNote, Tempo, analyze, follow,
+};
 use gooz_session::{Section, SessionError, Settings, Song, Stem, StemKind, StemPlacement};
 
 use crate::{
     BeatConfig, BeatStem, BeatVoiceSpec, DrumKind, PipelineConfig, RiffOutcome, build_beat,
-    hum_to_riff,
+    hum_to_riff, riff_from_transcription,
 };
 
 /// How many points the waveform is downsampled to for drawing.
@@ -83,6 +85,13 @@ pub struct RiffView {
     pub wave: Vec<f32>,
     /// The raw mono riff samples, for Web Audio playback.
     pub samples: Vec<f32>,
+    /// The tempo taken from the take (R-0041), or `None` when Easy Mode's own
+    /// clock stood in — because the take had no pulse, or because this path
+    /// does not listen for one (the demo, a sampled figure, a described song).
+    pub followed_bpm: Option<f64>,
+    /// The grid root taken from the take, or `None` when Easy Mode's own root
+    /// stood in, for the same reasons.
+    pub followed_root_hz: Option<f64>,
 }
 
 impl RiffView {
@@ -103,34 +112,91 @@ impl RiffView {
             notes,
             wave: peak_envelope(&stem.samples, WAVE_BUCKETS),
             samples: stem.samples.clone(),
+            followed_bpm: None,
+            followed_root_hz: None,
         }
     }
 }
 
-/// Runs Easy Mode's pipeline (220 Hz harmonic grid, 92 BPM) on a recorded take
-/// and returns a UI view. The `tense` control (`0..=100`, the smooth↔tense
-/// slider) sets the harmonic-series odd-limit: smoother grids favour simple
-/// ratios, tenser grids admit more complex ones. Propagates analysis errors
-/// (empty / zero-rate / non-finite input) as a typed [`DspError`].
+/// Runs Easy Mode's pipeline on a recorded take **at the take's own tempo and
+/// key** (R-0041), and returns a UI view.
+///
+/// The take is listened to first: where it says how fast it is and what pitch
+/// it sits around, the grid and the clock follow it. Where it does not say — a
+/// knock has no pitch, one held note has no pulse — Easy Mode's own
+/// [`GRID_ROOT_HZ`] and [`TEMPO_BPM`] stand in.
+///
+/// The `tense` control (`0..=100`, the smooth↔tense slider) sets the
+/// harmonic-series odd-limit: smoother grids favour simple ratios, tenser grids
+/// admit more complex ones. Following changes the grid's *root*, never its
+/// shape, so the slider keeps meaning exactly what it meant.
+///
+/// # Errors
+///
+/// Propagates analysis errors (empty / zero-rate / non-finite input) as a typed
+/// [`DspError`].
 pub fn riff_from_take(samples: &[f32], sample_rate: u32, tense: u8) -> Result<RiffView, DspError> {
-    let outcome = hum_to_riff(
-        samples,
+    let cfg = PipelineConfig::default();
+    // One analysis, used twice: to hear the take, and to render it. `analyze`
+    // is the expensive half of this pipeline by a wide margin, and answering
+    // two questions about one take should not cost two passes over it.
+    let transcription = analyze(samples, sample_rate, &cfg.analyze)?;
+    let heard = follow(samples, sample_rate, &transcription);
+    let outcome = riff_from_transcription(
+        transcription,
         sample_rate,
-        &easy_mode_grid(tense),
-        &easy_mode_tempo(),
-        &PipelineConfig::default(),
-    )?;
-    Ok(RiffView::from_outcome(&outcome))
+        &followed_grid(tense, &heard),
+        &followed_tempo(&heard),
+        &cfg,
+    );
+    Ok(RiffView {
+        followed_bpm: heard.bpm,
+        followed_root_hz: heard.root_hz,
+        ..RiffView::from_outcome(&outcome)
+    })
 }
 
+/// The pipeline itself, on a grid and a clock someone else chose.
 /// The built-in demo: a synthesized four-tone hum through the standard pipeline
 /// at the default smooth↔tense setting. Deterministic and device-free — powers
 /// the shell's "hear a demo" button and makes it previewable without a mic.
+///
+/// Deliberately does **not** follow the take (R-0041, owner decision): the demo
+/// is a fixed showcase of Easy Mode's own grid and clock, and re-tuning it to a
+/// synthetic hum would change a reference nobody asked to move.
 pub fn demo_riff() -> RiffView {
     let sample_rate = 48_000u32;
     let hum = demo_hum(sample_rate);
-    riff_from_take(&hum, sample_rate, DEFAULT_TENSE)
-        .expect("the demo hum is a valid, finite, non-empty signal")
+    let outcome = hum_to_riff(
+        &hum,
+        sample_rate,
+        &easy_mode_grid(DEFAULT_TENSE),
+        &easy_mode_tempo(),
+        &PipelineConfig::default(),
+    )
+    .expect("the demo hum is a valid, finite, non-empty signal");
+    RiffView::from_outcome(&outcome)
+}
+
+/// Easy Mode's grid, rooted where the take sits when the take said.
+fn followed_grid(tense: u8, heard: &Follow) -> PitchGrid {
+    let root = heard.root_hz.unwrap_or(GRID_ROOT_HZ);
+    PitchGrid::harmonic(root, odd_limit_for(tense)).unwrap_or_else(|_| easy_mode_grid(tense))
+}
+
+/// Easy Mode's clock, at the take's tempo when the take said.
+///
+/// Only a tempo inside [`MIN_BPM`]..=[`MAX_BPM`] counts as followed. `follow`
+/// never reports anything else, but [`beat_view`] takes its `bpm` from the
+/// webview, and a number from there is not a followed tempo until it is shown
+/// to be one: `1e-300` overflowed the beat builder into a panic, and `1e9`
+/// rendered a two-sample "beat".
+fn followed_tempo(heard: &Follow) -> Tempo {
+    let bpm = heard
+        .bpm
+        .filter(|bpm| (MIN_BPM..=MAX_BPM).contains(bpm))
+        .unwrap_or(TEMPO_BPM);
+    Tempo::new(bpm, BEATS_PER_BAR).unwrap_or_else(|_| easy_mode_tempo())
 }
 
 /// Maps the smooth↔tense slider onto the harmonic-series odd-limit: `0` → the
@@ -180,21 +246,24 @@ pub struct BeatView {
 /// (`0..=100`, the sparse↔busy slider): each drum voice's `E(k, 16)` onset
 /// count scales between a sparse floor and a busy ceiling. Deterministic and
 /// device-free.
-pub fn beat_view(busy: u8) -> BeatView {
+pub fn beat_view(busy: u8, bpm: Option<f64>) -> BeatView {
     let voices = beat_specs(busy);
     let cfg = BeatConfig {
         voices: voices.clone(),
         bars: BEAT_BARS,
     };
+    // The beat plays under the riff, so it follows whatever the riff followed;
+    // otherwise a take heard at 126 BPM would be mixed against a 92 BPM loop.
+    let tempo = followed_tempo(&Follow { bpm, root_hz: None });
     // build_beat only errors on invalid E(k, n); beat_specs keeps k <= 16 = n.
-    let stem = build_beat(&easy_mode_tempo(), 48_000, &cfg)
+    let stem = build_beat(&tempo, 48_000, &cfg)
         .expect("beat_specs always produces valid E(k, 16) patterns");
     BeatView::from_stem(&stem, &voices)
 }
 
 /// The shell's default beat (sparse↔busy at the slider's mid setting).
 pub fn demo_beat() -> BeatView {
-    beat_view(55)
+    beat_view(55, None)
 }
 
 impl BeatView {
@@ -315,10 +384,14 @@ pub fn build_song(
     riff: Option<&RiffView>,
     beat: Option<&BeatView>,
 ) -> Song {
+    // Whatever the riff followed is what the song is in. A session that says
+    // 92 BPM for a riff rendered at 126 is a file that lies about itself.
     let settings = Settings {
-        bpm: TEMPO_BPM,
+        bpm: riff.and_then(|r| r.followed_bpm).unwrap_or(TEMPO_BPM),
         beats_per_bar: BEATS_PER_BAR,
-        root_hz: GRID_ROOT_HZ,
+        root_hz: riff
+            .and_then(|r| r.followed_root_hz)
+            .unwrap_or(GRID_ROOT_HZ),
         odd_limit: odd_limit_for(tense),
     };
     let _ = busy; // density is captured in the beat stem's samples already
@@ -526,14 +599,14 @@ mod tests {
 
     #[test]
     fn busy_slider_increases_total_onsets() {
-        let sparse: u32 = beat_view(0).voices.iter().map(|v| v.onsets).sum();
-        let busy: u32 = beat_view(100).voices.iter().map(|v| v.onsets).sum();
+        let sparse: u32 = beat_view(0, None).voices.iter().map(|v| v.onsets).sum();
+        let busy: u32 = beat_view(100, None).voices.iter().map(|v| v.onsets).sum();
         assert!(busy > sparse, "busy={busy} should exceed sparse={sparse}");
     }
 
     #[test]
     fn beat_view_is_deterministic() {
-        assert_eq!(beat_view(70), beat_view(70));
+        assert_eq!(beat_view(70, None), beat_view(70, None));
     }
 
     #[test]

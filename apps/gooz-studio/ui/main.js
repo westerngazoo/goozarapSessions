@@ -204,8 +204,13 @@ function showResult(data, heading) {
     s.textContent = `bar ${b}`;
     bl.appendChild(s);
   }
+  // The tempo the riff was actually laid out at, and whether it was yours.
+  const followed = data.followedBpm != null;
+  const bpm = Math.round(followed ? data.followedBpm : 92);
   document.getElementById("meta").textContent =
-    `${data.bars} bars · ${(data.seconds || 0).toFixed(1)}s · 92 bpm`;
+    `${data.bars} bars · ${(data.seconds || 0).toFixed(1)}s · ${bpm} bpm` +
+    (followed ? " · tu tempo" : "");
+  refreshBeat();
   document.getElementById("intro").classList.add("hidden");
   document.getElementById("result").classList.remove("hidden");
 }
@@ -296,7 +301,9 @@ function scale(min, max, b) { return Math.round(min + (max - min) * (b / 100)); 
 // Backend beat when Tauri is present; otherwise a client-side synth so the
 // button still works in a plain browser preview.
 async function fetchBeat(busy) {
-  if (invoke) return invoke("beat", { busy });
+  // The beat plays under the riff, so it follows whatever the riff
+  // followed — otherwise a take heard at 126 BPM gets a 92 BPM loop.
+  if (invoke) return invoke("beat", { busy, bpm: current?.followedBpm ?? null });
   await wait(120);
   return synthBeat(busy);
 }
@@ -366,6 +373,15 @@ async function playBeat() {
   beatPlaying = true;
   document.getElementById("beatBtn").textContent = "◼ beat";
 }
+// A new riff can be at a new tempo. A beat fetched for the previous one would
+// play against it — and be what save/export write next to it, under settings
+// that claim the new tempo. So the beat is fetched again for the new riff:
+// restarted if it was playing, replaced if it was only held for save/export.
+async function refreshBeat() {
+  if (beatPlaying) return playBeat();
+  if (lastBeat) lastBeat = await fetchBeat(busyValue());
+}
+
 async function toggleBeat() {
   if (beatPlaying) return stopBeat();
   await playBeat();

@@ -230,6 +230,9 @@ fn render_config_for(plan: &SoundPlan) -> RenderConfig {
 fn riff_view_of(samples: Vec<f32>, notes: &[QuantizedNote], bars: u32) -> RiffView {
     let seconds = samples.len() as f64 / f64::from(SAMPLE_RATE);
     RiffView {
+        // A described song follows the prompt, not a take (R-0041).
+        followed_bpm: None,
+        followed_root_hz: None,
         sample_rate: SAMPLE_RATE,
         bars: if samples.is_empty() { 0 } else { bars },
         seconds,
