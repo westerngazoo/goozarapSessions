@@ -118,6 +118,7 @@ body.listening .rec { box-shadow: 0 0 0 1px rgba(255, 45, 111, 0.8), 0 0 90px rg
   transition: color 0.15s, border-color 0.15s, box-shadow 0.15s;
 }
 .mode:hover { color: var(--text); }
+.mode:disabled { opacity: 0.4; cursor: not-allowed; }
 .mode.is-on {
   color: var(--violet); border-color: var(--violet);
   box-shadow: 0 0 18px rgba(168, 85, 247, 0.25);

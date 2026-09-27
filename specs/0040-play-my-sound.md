@@ -1,6 +1,6 @@
 # SPEC-0040 — Play my sound
 
-- **Status:** Proposed — architect review pending
+- **Status:** Accepted — architect-reviewed after implementation (round 1: request changes, addressed)
 - **Realizes:** R-0040
 - **Author:** Claude (owner: Gustavo Delgadillo)
 - **Created:** 2026-09-13
@@ -54,6 +54,32 @@ pub fn instrument_from_take(
 they are the existing definition of "Easy Mode", and a second copy would let the
 two modes drift onto different grids.
 
+### From take to instrument — what the first draft missed
+
+A take is a **capture window**, not a sound. Three steps turn one into the
+other, in `the_sound`:
+
+1. **Cut to the sound** with `gooz_dsp::sound_span`: the first sample within
+   −20 dB of the peak (minus a 5 ms pre-roll so the attack survives) to the last
+   within −30 dB (so a decay tail survives but trailing hiss does not).
+2. **Cap at one beat.** Every degree in the figure is at or above `1:1`, so the
+   longest hit is the sound itself; capping the sound caps every hit, and a held
+   hum climbs instead of stacking.
+3. **Fade both cuts** — 2 ms in, 10 ms out — so neither end clicks.
+
+Before any of that, the *whole* take is checked: a NaN or an out-of-range
+sample is a typed error even if it sits in silence that would be cut away. A
+take with nothing above −50 dBFS is `DspError::Silent`.
+
+The rendered figure is **padded to whole bars** with the same rule the hum
+pipeline uses (`pipeline::pad_to_bars`, now shared). Unpadded, the loop drifted
+against the beat from the first repeat, and `mixdown` — which wraps each stem
+by its own length — replayed its start mid-bar in every export.
+
+Cards come from one mapping (`From<&QuantizedNote> for NoteView`) for sung
+notes, and `sampled_card` for this path: **ratio only**, `hz` and `cents` are
+`None`, because nothing measured the recording's pitch.
+
 ### The shell (AC7)
 
 A `record_stop_instrument(tense)` command beside the existing
@@ -61,6 +87,17 @@ A `record_stop_instrument(tense)` command beside the existing
 state. One button records; two commands are two ways to hear it back.
 
 ### The UI (AC7)
+
+The result's heading travels **with the result** (`showResult(data, heading)`),
+captured when recording starts — not read from whichever mode pill is lit when
+the result arrives. The pills are disabled while anything is in flight.
+
+In *mi instrumento* there is **no demo link and no demo fallback**: the hum demo
+is a guitar built from a synthetic hum, and showing it under "tu instrumento"
+after a failed take would be showing someone else's sound. A failed take shows
+its typed error on the intro screen, where the user can simply record again.
+Hum mode keeps R-0013's graceful fallback.
+
 
 A mode toggle next to the record button — *tararear* (today's hum→riff) and
 *mi instrumento* (this). Everything downstream is untouched: the same waveform
@@ -100,3 +137,4 @@ None.
 ## Changelog
 
 - 2026-09-13 — created; proposed for architect review.
+- 2026-09-26 — architect review round 1: take trimming, one-beat cap, silence as an error, bar padding, honest cards, UI error path. The review came after implementation; that ordering is noted here rather than hidden.

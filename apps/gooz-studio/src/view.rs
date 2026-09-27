@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
-use gooz_dsp::{DspError, PitchGrid, Tempo};
+use gooz_dsp::{DspError, PitchGrid, QuantizedNote, Tempo};
 use gooz_session::{Section, SessionError, Settings, Song, Stem, StemKind, StemPlacement};
 
 use crate::{
@@ -41,10 +41,29 @@ pub struct NoteView {
     pub den: u64,
     /// Octave offset from the grid root.
     pub octave: i32,
-    /// Snapped frequency in Hz.
-    pub hz: f64,
-    /// Cents offset from the hummed pitch (how far the snap moved it).
-    pub cents: f64,
+    /// Snapped frequency in Hz, or `None` when the sound's pitch is not known.
+    ///
+    /// A sampled figure (R-0040) plays a recording shifted by ratios; degree
+    /// `1:1` is whatever pitch the recording had, which nothing measured. A
+    /// card that said "330 Hz" under a knock would be stating a number that is
+    /// not what sounds.
+    pub hz: Option<f64>,
+    /// Cents offset from the hummed pitch (how far the snap moved it), or
+    /// `None` when there was no hummed pitch to be offset from.
+    pub cents: Option<f64>,
+}
+
+impl From<&QuantizedNote> for NoteView {
+    /// A note that was sung and snapped: its ratio, and the pitch it snapped to.
+    fn from(note: &QuantizedNote) -> NoteView {
+        NoteView {
+            num: note.degree.num(),
+            den: note.degree.den(),
+            octave: note.octave,
+            hz: Some(note.freq_hz),
+            cents: Some(note.cents_offset),
+        }
+    }
 }
 
 /// A riff prepared for the UI: what it heard, a waveform envelope to draw, and
@@ -71,17 +90,7 @@ impl RiffView {
     /// [`WAVE_BUCKETS`]-point peak envelope.
     pub fn from_outcome(outcome: &RiffOutcome) -> RiffView {
         let stem = &outcome.stem;
-        let notes = outcome
-            .notes
-            .iter()
-            .map(|n| NoteView {
-                num: n.degree.num(),
-                den: n.degree.den(),
-                octave: n.octave,
-                hz: n.freq_hz,
-                cents: n.cents_offset,
-            })
-            .collect();
+        let notes = outcome.notes.iter().map(NoteView::from).collect();
         let seconds = if stem.sample_rate == 0 {
             0.0
         } else {
@@ -127,7 +136,7 @@ pub fn demo_riff() -> RiffView {
 /// Maps the smooth↔tense slider onto the harmonic-series odd-limit: `0` → the
 /// simplest grid ([`TENSE_MIN_ODD`]), `100` → the densest ([`TENSE_MAX_ODD`]),
 /// stepping through the odd harmonics in between.
-pub(crate) fn odd_limit_for(tense: u8) -> u64 {
+fn odd_limit_for(tense: u8) -> u64 {
     let b = f64::from(tense.min(100)) / 100.0;
     let rungs = (TENSE_MAX_ODD - TENSE_MIN_ODD) / 2;
     TENSE_MIN_ODD + 2 * (b * rungs as f64).round() as u64

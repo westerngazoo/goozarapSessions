@@ -233,16 +233,7 @@ fn riff_view_of(samples: Vec<f32>, notes: &[QuantizedNote], bars: u32) -> RiffVi
         sample_rate: SAMPLE_RATE,
         bars: if samples.is_empty() { 0 } else { bars },
         seconds,
-        notes: notes
-            .iter()
-            .map(|n| NoteView {
-                num: n.degree.num(),
-                den: n.degree.den(),
-                octave: n.octave,
-                hz: n.freq_hz,
-                cents: n.cents_offset,
-            })
-            .collect(),
+        notes: notes.iter().map(NoteView::from).collect(),
         wave: peak_envelope(&samples, WAVE_BUCKETS),
         samples,
     }

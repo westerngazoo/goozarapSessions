@@ -13,3 +13,7 @@ docs/architecture-overview.md
 docs/code-walkthrough.md
 docs/design-philosophy.md
 docs/flows.md
+docs/diagrams/
+
+# Agent worktrees created by the Claude Code session tooling.
+.claude/worktrees/

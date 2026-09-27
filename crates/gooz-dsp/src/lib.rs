@@ -32,6 +32,7 @@ mod error;
 mod onset;
 mod quantize;
 mod shift;
+mod span;
 mod transcribe;
 mod validate;
 mod yin;
@@ -40,6 +41,7 @@ pub use error::DspError;
 pub use onset::detect_onsets;
 pub use quantize::{QuantizedNote, quantize_notes};
 pub use shift::{max_output_samples, shift_pitch};
+pub use span::{SILENCE_FLOOR, sound_span};
 pub use transcribe::{Config, NoteEvent, Onset, PitchFrame, PitchTrack, Transcription, analyze};
 pub use yin::pitch_track;
 

@@ -36,7 +36,8 @@ owner asked to see when they asked for scales.
 
 - **AC1 — A recording plays across the grid.** One call takes a recorded take
   and returns a playable riff in which the take sounds once per grid degree,
-  ascending, on the beat grid.
+  ascending, **on the beat** — whatever silence or room noise preceded the
+  sound inside the capture window — and each hit measurably at its own ratio.
 - **AC2 — Any sound works.** A hum, a knock, a click, a noise burst: none is
   rejected, and none requires a detectable pitch. A pitched take and an
   unpitched take both return a populated riff.
@@ -45,8 +46,11 @@ owner asked to see when they asked for scales.
 - **AC4 — The slider changes the scale.** A tenser setting yields a riff over at
   least as many degrees as a smoother one, and the degrees it adds are the more
   complex ratios.
-- **AC5 — Bad input is a typed error, not a crash.** An empty take, a zero
-  sample rate, or a non-finite take reports a typed `DspError`; nothing panics.
+- **AC5 — Bad input is a typed error, not a crash — and the user is told.** An
+  empty take, a zero sample rate, a non-finite or out-of-range sample, or a take
+  with **no sound in it** (a muted mic, a denied permission, room hiss alone)
+  reports a typed `DspError`; nothing panics. The app shows the error rather than
+  substituting something else for the user's sound.
 - **AC6 — Deterministic and bounded.** The same take and setting always produce
   identical audio; output is finite and within `[-1, 1]`.
 - **AC7 — Reachable from the app.** The shell exposes it as a command, and the
@@ -78,6 +82,12 @@ None — settled in the decision log.
 
 | Date | Decision | Rationale |
 |------|----------|-----------|
+| 2026-09-26 | **The take is cut to the sound inside it** before it becomes an instrument | Architect review, blocking. A take is a 3.5 s capture window; played whole, each hit replayed the lead-in first, so a knock 0.4 s in landed at beats 0.61, 1.49, 2.41, 3.35. Every earlier test fixture started at sample 0, which the app never produces. |
+| 2026-09-26 | **Each hit is capped at one beat, with a short fade** (owner decision) | A held hum sounded all its degrees at once — a chord filling up, not a climb. Every figure degree is at or above `1:1`, so capping the sound caps every hit; the sampler itself still lets one-shots ring (R-0039). The fade answers R-0039's reason for not cutting: clicks. |
+| 2026-09-26 | **Silence is a typed error, not an instrument** | A muted mic was accepted; −60 dBFS hiss was normalized +60 dB and played as the user's instrument. `DspError::Silent`, below −50 dBFS. |
+| 2026-09-26 | **A sampled card shows the ratio and no pitch** | Degree `1:1` is whatever pitch the recording had, which nothing measured; a card saying "330 Hz" under a knock stated a number that is not what sounds. `NoteView::hz` / `cents` are `Option`s. |
+| 2026-09-26 | **Refuse** a sample outside `[-1, 1]`, rather than clamp | `Sampler` holds audio (R-0039). A hot device sample fails this mode while hum mode accepts it; the difference is that this mode *plays the samples back*. |
+| 2026-09-26 | **Neither the take's key nor its tempo is followed here** | Architect review of R-0041's interaction: a single knock has no pulse under R-0041's own gates, and the grid root has no audible effect on a sampled figure (degrees are ratios; the sampler ignores Hz). The figure should run on the *session* clock; until there is one, 92 BPM is it. |
 | 2026-09-13 | The figure is **the grid itself, ascending** — one hit per degree | It is the shortest path from "I hit the table" to "that is an instrument", it needs no second recording, and it literally demonstrates what the owner asked for: the sound moved across the scale. A generated melody would be prettier and would hide what is being shown. |
 | 2026-09-13 | The recording's **root octave is the octave the figure starts at**, passed explicitly | R-0039's blocking finding was that an implicit register is a bug waiting to happen. The caller states it; nothing is inferred. |
 | 2026-09-13 | Returns the existing `RiffView`, not a new type | The shell already plays, draws, saves, and exports a `RiffView`. A parallel type would duplicate all four paths to say the same thing. |
@@ -86,3 +96,4 @@ None — settled in the decision log.
 ## Changelog
 
 - 2026-09-13 — created, accepted for M8.
+- 2026-09-26 — architect review round 1 (request changes): AC1 and AC5 sharpened; five decisions added.
