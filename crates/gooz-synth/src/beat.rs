@@ -86,3 +86,64 @@ pub fn render_beat(voices: &[BeatVoice], tempo: &Tempo, bars: u32, sample_rate: 
     normalize_peak(&mut out);
     out
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::DrumKind;
+
+    /// `render_beat` as it was before the hit-offset arithmetic moved into
+    /// `pattern_onsets` (SPEC-0033 §2.2): the reference the refactor must match
+    /// bit for bit.
+    fn render_beat_before_refactor(
+        voices: &[BeatVoice],
+        tempo: &Tempo,
+        bars: u32,
+        sample_rate: u32,
+    ) -> Vec<f32> {
+        let bar_samples = ((tempo.bar_seconds() * f64::from(sample_rate)).round() as usize).max(1);
+        let mut out = vec![0.0f32; bar_samples * bars as usize];
+        for bar in 0..bars {
+            let bar_start = bar as usize * bar_samples;
+            for voice in voices {
+                let len = voice.pattern.len();
+                for step in (0..len).filter(|&step| voice.pattern.is_onset(step)) {
+                    let offset_in_bar =
+                        ((step as f64 / len as f64) * bar_samples as f64).round() as usize;
+                    let offset = bar_start + offset_in_bar.min(bar_samples.saturating_sub(1));
+                    mix_hit(voice.kind, sample_rate, voice.level, &mut out, offset);
+                }
+            }
+        }
+        normalize_peak(&mut out);
+        out
+    }
+
+    /// Three lanes of different step counts, rotated, whose tails ring across
+    /// bar lines, over three bars.
+    #[test]
+    fn render_beat_is_unchanged_by_the_onset_refactor() {
+        let tempo = Tempo::new(180.0, 4.0).expect("valid tempo");
+        let lane = |kind, k, n, rotate, level| BeatVoice {
+            kind,
+            pattern: Pattern::euclidean(k, n)
+                .expect("valid E(k, n)")
+                .rotate(rotate),
+            level,
+        };
+        let voices = [
+            lane(DrumKind::Kick, 5, 16, 0, 1.0),
+            lane(DrumKind::Snare, 3, 8, 3, 0.9),
+            lane(DrumKind::HiHat, 7, 12, 5, 0.6),
+        ];
+        let now = render_beat(&voices, &tempo, 3, 48_000);
+        let before = render_beat_before_refactor(&voices, &tempo, 3, 48_000);
+        assert_eq!(now.len(), before.len());
+        let differing = now
+            .iter()
+            .zip(&before)
+            .filter(|(a, b)| a.to_bits() != b.to_bits())
+            .count();
+        assert_eq!(differing, 0, "samples that changed bits");
+    }
+}
