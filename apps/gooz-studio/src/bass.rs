@@ -2,24 +2,22 @@
 //!
 //! A style's plan names its bass ([`BassVoice`]); this module decides what that
 //! bass plays and renders it on the same clock, rate and length as the voice and
-//! the drums. It also works out the gains the studio plays the tracks at, so
-//! playback is what export writes.
+//! the drums.
 
 use gooz_model::{BassVoice, SoundPlan};
 use gooz_synth::{Bass808, BassNote, DrumKind, pattern_onsets, render_808};
 
 use crate::describe::{beat_specs_from, plan_tempo};
 use crate::pipeline::bar_samples;
-use crate::view::{
-    BASS_LEVEL, BEAT_LEVEL, BassView, PlaybackLevels, RIFF_LEVEL, WAVE_BUCKETS, peak_envelope,
-};
+use crate::view::{BassView, WAVE_BUCKETS, peak_envelope};
 
 /// The bottom of the 808's register: the root is folded by octaves into
 /// `[REGISTER_LOW_HZ, 2 · REGISTER_LOW_HZ)`.
 const REGISTER_LOW_HZ: f64 = 40.0;
 
 /// The style's bass for `bars` bars at `sample_rate`, on `root_hz`, or `None`
-/// when the style has no bass.
+/// when the style has no bass, or nothing for it to follow (a plan with no
+/// valid kick lane, which `plan_sound` never emits but a hand-edited plan can).
 ///
 /// An 808 hits on every kick of the style's kick lane, at `root_hz` moved by
 /// octaves into its register, each hit lasting until the next kick and the last
@@ -32,16 +30,10 @@ pub(crate) fn bass_from_plan(
 ) -> Option<BassView> {
     match plan.bass? {
         BassVoice::Sub808 => {
-            // `plan_sound` always emits a valid kick lane (R-0026 AC5), and
-            // `beat_from_plan` has already built this very pattern for the
-            // drums, so neither can fail here.
             let kick = beat_specs_from(plan)
                 .into_iter()
-                .find(|lane| lane.kind == DrumKind::Kick)
-                .expect("plan_sound always emits a kick lane");
-            let pattern = kick
-                .pattern()
-                .expect("plan_sound only emits valid E(k, n) lanes");
+                .find(|lane| lane.kind == DrumKind::Kick)?;
+            let pattern = kick.pattern().ok()?;
             let tempo = plan_tempo(plan);
             let len = bars as usize * bar_samples(&tempo, sample_rate);
             let hz = in_808_register(root_hz)?;
@@ -105,31 +97,6 @@ fn hits_until_next(onsets: &[usize], len: usize, hz: f64, sample_rate: u32) -> V
         .collect()
 }
 
-/// The gains that make playback equal export's mixdown: each track at the level
-/// `build_song` places it at, all scaled by one factor that is below 1 only when
-/// their sum would pass full scale — export's peak limit, computed the same way.
-pub(crate) fn playback_levels(
-    voice: &[f32],
-    track: &[f32],
-    bass: Option<&[f32]>,
-) -> PlaybackLevels {
-    let bass = bass.unwrap_or(&[]);
-    let at = |stem: &[f32], i: usize, level: f32| stem.get(i).map_or(0.0, |x| x * level);
-    let longest = voice.len().max(track.len()).max(bass.len());
-    // Summed in `mixdown`'s order (voice, drums, bass) so the peak is its peak.
-    let peak = (0..longest)
-        .map(|i| {
-            (at(voice, i, RIFF_LEVEL) + at(track, i, BEAT_LEVEL) + at(bass, i, BASS_LEVEL)).abs()
-        })
-        .fold(0.0f32, f32::max);
-    let scale = if peak > 1.0 { 1.0 / peak } else { 1.0 };
-    PlaybackLevels {
-        voice: RIFF_LEVEL * scale,
-        track: BEAT_LEVEL * scale,
-        bass: BASS_LEVEL * scale,
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -170,19 +137,5 @@ mod tests {
             .collect();
         assert_eq!(ends, vec![11_308, 22_615, 22_615, 40_000, 50_000]);
         assert_eq!(hits[2].duration_secs, 0.0, "a repeated onset has no length");
-    }
-
-    #[test]
-    fn levels_are_export_levels_until_the_sum_would_clip() {
-        let quiet = playback_levels(&[0.1, -0.1], &[0.2, 0.2], Some(&[0.1, 0.0]));
-        assert_eq!(
-            (quiet.voice, quiet.track, quiet.bass),
-            (RIFF_LEVEL, BEAT_LEVEL, BASS_LEVEL)
-        );
-        let loud = playback_levels(&[0.9, 0.0], &[1.0, 0.0], Some(&[1.0, 0.0]));
-        let peak = 0.9 * RIFF_LEVEL + 1.0 * BEAT_LEVEL + 1.0 * BASS_LEVEL;
-        assert!((loud.voice - RIFF_LEVEL / peak).abs() < 1e-6);
-        assert!((loud.track - BEAT_LEVEL / peak).abs() < 1e-6);
-        assert!((loud.bass - BASS_LEVEL / peak).abs() < 1e-6);
     }
 }

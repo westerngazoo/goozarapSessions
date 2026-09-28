@@ -10,6 +10,11 @@
 //! bar-aligned loop: three 808-style voices (kick, snare, hi-hat) triggered at
 //! each pattern onset. Realizes R-0009 / SPEC-0009.
 //!
+//! The 808 bass ([`render_808`]) is a monophonic sine sub-bass with a long
+//! decay, a glide on overlapping notes and a `tanh` drive; [`pattern_onsets`]
+//! says where a pattern's hits land, so a bass can follow the kick to the
+//! sample. Realizes R-0033 / SPEC-0033.
+//!
 //! Bounded responsibility: notes/patterns → instrument audio. No device I/O, no
 //! transport, no analysis. Realizes R-0007 / SPEC-0007 and R-0009 / SPEC-0009.
 //!

@@ -2,21 +2,22 @@
 //! style: at your tempo, entering on a downbeat. Realizes R-0042 / SPEC-0042.
 //!
 //! The voice and the track come back as a [`RiffView`] and a [`BeatView`]
-//! because those are what the studio already plays, saves and exports. That
-//! only works if the two agree on three things, which this module guarantees
-//! and its tests pin: **the same sample rate, the same length, and a whole
-//! number of bars** of 4/4.
+//! because those are what the studio already plays, saves and exports, and a
+//! style that brings a bass adds a [`BassView`] (R-0033). That only works if
+//! they all agree on three things, which this module guarantees and its tests
+//! pin: **the same sample rate, the same length, and a whole number of bars**
+//! of 4/4.
 
 use gooz_dsp::{DspError, analyze, first_sung_note, follow, quantize_notes};
 use gooz_model::{Meter, SoundPlan, parse_intent, plan_sound};
 use serde::Serialize;
 
-use crate::bass::{bass_from_plan, playback_levels};
+use crate::bass::bass_from_plan;
 use crate::describe::{beat_from_plan, plan_tempo};
 use crate::pipeline::{PipelineConfig, bar_samples, pad_to_bars};
 use crate::view::{
     BassView, BeatView, NoteView, Part, PlaybackLevels, RiffView, WAVE_BUCKETS, followed_grid,
-    peak_envelope,
+    peak_envelope, playback_levels,
 };
 
 /// The level the voice is brought to: −1 dBFS at its peak.

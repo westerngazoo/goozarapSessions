@@ -315,6 +315,31 @@ pub struct PlaybackLevels {
     pub bass: f32,
 }
 
+/// The gains that make playback equal export's mixdown: each track at the level
+/// `build_song` places it at, all scaled by one factor that is below 1 only when
+/// their sum would pass full scale — export's peak limit, computed the same way.
+pub(crate) fn playback_levels(
+    voice: &[f32],
+    track: &[f32],
+    bass: Option<&[f32]>,
+) -> PlaybackLevels {
+    let bass = bass.unwrap_or(&[]);
+    let at = |stem: &[f32], i: usize, level: f32| stem.get(i).map_or(0.0, |x| x * level);
+    let longest = voice.len().max(track.len()).max(bass.len());
+    // Summed in `mixdown`'s order (voice, drums, bass) so the peak is its peak.
+    let peak = (0..longest)
+        .map(|i| {
+            (at(voice, i, RIFF_LEVEL) + at(track, i, BEAT_LEVEL) + at(bass, i, BASS_LEVEL)).abs()
+        })
+        .fold(0.0f32, f32::max);
+    let scale = if peak > 1.0 { 1.0 / peak } else { 1.0 };
+    PlaybackLevels {
+        voice: RIFF_LEVEL * scale,
+        track: BEAT_LEVEL * scale,
+        bass: BASS_LEVEL * scale,
+    }
+}
+
 /// A beat prepared for the UI: the lanes, a waveform envelope, and raw samples.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -466,8 +491,9 @@ pub(crate) fn peak_envelope(samples: &[f32], buckets: usize) -> Vec<f32> {
 }
 
 /// Assembles a saveable [`Song`] from what the shell is holding: the current
-/// slider settings plus an optional riff and/or beat. Each present part becomes
-/// a [`Stem`] placed at bar 0; a single section spans the longer of the two.
+/// slider settings plus an optional riff (or voice), beat and bass. Each present
+/// part becomes a [`Stem`] placed at bar 0, in that order, at [`RIFF_LEVEL`],
+/// [`BEAT_LEVEL`] and [`BASS_LEVEL`]; a single section spans the longest.
 pub fn build_song(
     name: &str,
     tense: u8,
@@ -580,8 +606,8 @@ fn session_path(dir: &Path, name: &str, ext: &str) -> Result<PathBuf, SessionErr
     Ok(dir.join(format!("{stem}.{ext}")))
 }
 
-/// Saves the current riff/beat as a `.json` session under `dir`, returning the
-/// written path.
+/// Saves the current riff/beat/bass as a `.json` session under `dir`, returning
+/// the written path.
 pub fn save_session(
     dir: &Path,
     name: &str,
@@ -597,8 +623,8 @@ pub fn save_session(
     Ok(path)
 }
 
-/// Mixes the current riff/beat and writes a master `.wav` under `dir`, returning
-/// the written path.
+/// Mixes the current riff/beat/bass and writes a master `.wav` under `dir`,
+/// returning the written path.
 pub fn export_master(
     dir: &Path,
     name: &str,
@@ -617,6 +643,20 @@ pub fn export_master(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn levels_are_export_levels_until_the_sum_would_clip() {
+        let quiet = playback_levels(&[0.1, -0.1], &[0.2, 0.2], Some(&[0.1, 0.0]));
+        assert_eq!(
+            (quiet.voice, quiet.track, quiet.bass),
+            (RIFF_LEVEL, BEAT_LEVEL, BASS_LEVEL)
+        );
+        let loud = playback_levels(&[0.9, 0.0], &[1.0, 0.0], Some(&[1.0, 0.0]));
+        let peak = 0.9 * RIFF_LEVEL + 1.0 * BEAT_LEVEL + 1.0 * BASS_LEVEL;
+        assert!((loud.voice - RIFF_LEVEL / peak).abs() < 1e-6);
+        assert!((loud.track - BEAT_LEVEL / peak).abs() < 1e-6);
+        assert!((loud.bass - BASS_LEVEL / peak).abs() < 1e-6);
+    }
 
     #[test]
     fn demo_riff_hears_the_four_hummed_tones() {

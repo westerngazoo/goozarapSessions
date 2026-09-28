@@ -25,8 +25,6 @@ use gooz_synth::{Bass808, BassNote, BeatVoice, DrumKind, pattern_onsets, render_
 
 const RATE: u32 = 16_000;
 const TENSE: u8 = 30;
-/// Easy Mode's root, the grid's root when the take's was not followed.
-const DEFAULT_ROOT_HZ: f64 = 220.0;
 /// The levels `build_song` places each stem at (SPEC-0033 §2.4).
 const VOICE_LEVEL: f32 = 1.0;
 const DRUMS_LEVEL: f32 = 0.9;
@@ -358,7 +356,12 @@ fn ac7_the_808_plays_the_grid_root_folded_into_its_register() {
         let song = accompany(&sing(hz, 118.0, 6), "trap");
         let what = format!("a take sung at {hz} Hz");
         let bass = bass_of(&song, &what);
-        let grid_root = song.voice.followed_root_hz.unwrap_or(DEFAULT_ROOT_HZ);
+        // A take that follows no root would fold the default for all three and
+        // prove nothing about the register's bottom, middle and top.
+        let grid_root = song
+            .voice
+            .followed_root_hz
+            .unwrap_or_else(|| panic!("{what}: no root was followed"));
         assert!(
             (40.0..80.0).contains(&bass.root_hz),
             "{what}: the 808 is at {} Hz, outside [40, 80)",

@@ -187,7 +187,7 @@ struct Settings {
     drive: f32,
 }
 
-impl Settings {
+impl From<&Bass808> for Settings {
     fn from(cfg: &Bass808) -> Settings {
         let glide_secs = if cfg.glide_secs.is_finite() && cfg.glide_secs > 0.0 {
             cfg.glide_secs

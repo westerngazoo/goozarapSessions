@@ -518,7 +518,7 @@ function synthBeat(busy) {
 
 function showLanes(voices) {
   const lanes = (voices || []).map((v) => `${v.name} ${v.onsets}/${v.steps}`);
-  if (bass) lanes.push("808");
+  if (bass) lanes.push(bass.voice);
   document.getElementById("beatLanes").textContent = lanes.join("  ·  ");
 }
 function stopBeat() {
