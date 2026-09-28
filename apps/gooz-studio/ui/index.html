@@ -11,17 +11,18 @@
 
     <header class="topbar">
       <div class="wordmark">gooza<span>rap</span><em>sessions</em></div>
+      <!-- Always on screen: from a result, a mode is the way back to the mic. -->
+      <div id="modes" class="modes" role="radiogroup" aria-label="what to do with the recording">
+        <button class="mode is-on" role="radio" aria-checked="true" data-mode="hum">tararear</button>
+        <button class="mode" role="radio" aria-checked="false" data-mode="instrument">mi instrumento</button>
+        <button class="mode" role="radio" aria-checked="false" data-mode="style">sobre un estilo</button>
+      </div>
       <div class="session-tag">SESSION <b>001</b></div>
     </header>
 
     <main class="stage">
-      <!-- first run -->
+      <!-- the mic: first run, and where every result goes back to -->
       <section id="intro" class="intro">
-        <div id="modes" class="modes" role="radiogroup" aria-label="what to do with the recording">
-          <button class="mode is-on" role="radio" aria-checked="true" data-mode="hum">tararear</button>
-          <button class="mode" role="radio" aria-checked="false" data-mode="instrument">mi instrumento</button>
-          <button class="mode" role="radio" aria-checked="false" data-mode="style">sobre un estilo</button>
-        </div>
         <div id="styles" class="styles hidden" role="radiogroup" aria-label="style"></div>
         <p id="prompt" class="prompt">hum something<span class="cursor">_</span></p>
         <button id="recBtn" class="rec" aria-label="record">
@@ -48,7 +49,7 @@
           <button id="playBtn" class="btn play">▶ play loop</button>
           <button id="saveBtn" class="btn ghost">⤓ save session</button>
           <button id="exportBtn" class="btn ghost">◈ export wav</button>
-          <button id="redoBtn" class="btn ghost">↺ redo</button>
+          <button id="redoBtn" class="btn ghost">← volver</button>
           <span id="meta" class="meta"></span>
         </div>
         <p id="toast" class="toast hidden"></p>

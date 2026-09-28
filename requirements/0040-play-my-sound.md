@@ -54,8 +54,9 @@ owner asked to see when they asked for scales.
 - **AC6 — Deterministic and bounded.** The same take and setting always produce
   identical audio; output is finite and within `[-1, 1]`.
 - **AC7 — Reachable from the app.** The shell exposes it as a command, and the
-  UI offers it next to the existing record button, reusing the existing
-  playback, waveform, save, and export paths.
+  UI offers it as a mode that stays on screen with every result (amended
+  2026-09-27, see the decision log), reusing the existing playback, waveform,
+  save, and export paths.
 - **AC8 — Tests, docs, gates.** The library path is deviceless and fully tested;
   every public item documented; all four toolchain gates green.
 
@@ -82,6 +83,7 @@ None — settled in the decision log.
 
 | Date | Decision | Rationale |
 |------|----------|-----------|
+| 2026-09-27 | **The modes stay on screen, and picking one from a result goes back to the mic** (owner decision, "arreglo rápido ahora") | The owner entered *mi instrumento* and could not find the way back. The modes lived inside the intro, so a result hid them, and its only exit, "↺ redo", reads as "record again". The pills now sit in the top bar, a pill on a result discards it and returns to the mic in that mode, and the exit says "← volver". Results were never kept, so nothing is lost that was kept before. This amends AC7's "next to the record button". |
 | 2026-09-26 | **The take is cut to the sound inside it** before it becomes an instrument | Architect review, blocking. A take is a 3.5 s capture window; played whole, each hit replayed the lead-in first, so a knock 0.4 s in landed at beats 0.61, 1.49, 2.41, 3.35. Every earlier test fixture started at sample 0, which the app never produces. |
 | 2026-09-26 | **Each hit is capped at one beat, with a short fade** (owner decision) | A held hum sounded all its degrees at once — a chord filling up, not a climb. Every figure degree is at or above `1:1`, so capping the sound caps every hit; the sampler itself still lets one-shots ring (R-0039). The fade answers R-0039's reason for not cutting: clicks. |
 | 2026-09-26 | **Silence is a typed error, not an instrument** | A muted mic was accepted; −60 dBFS hiss was normalized +60 dB and played as the user's instrument. `DspError::Silent`, below −50 dBFS. |
@@ -97,3 +99,4 @@ None — settled in the decision log.
 
 - 2026-09-13 — created, accepted for M8.
 - 2026-09-26 — architect review round 1 (request changes): AC1 and AC5 sharpened; five decisions added.
+- 2026-09-27 — AC7 amended: the modes stay on screen with every result and are the way back from one (owner decision).
