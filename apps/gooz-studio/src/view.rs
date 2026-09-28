@@ -12,6 +12,7 @@ use serde::{Deserialize, Serialize};
 use gooz_dsp::{
     DspError, Follow, MAX_BPM, MIN_BPM, PitchGrid, QuantizedNote, Tempo, analyze, follow,
 };
+use gooz_model::BassVoice;
 use gooz_session::{Section, SessionError, Settings, Song, Stem, StemKind, StemPlacement};
 
 use crate::{
@@ -273,6 +274,40 @@ pub struct VoiceView {
     pub steps: u32,
 }
 
+/// A bass part prepared for the UI, the session and the export (R-0033).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BassView {
+    /// Which bass this is; its stem name comes from here.
+    pub voice: BassVoice,
+    /// Sample rate of `samples`, in Hz.
+    pub sample_rate: u32,
+    /// Length of the loop in whole bars.
+    pub bars: u32,
+    /// Duration of the loop in seconds.
+    pub seconds: f64,
+    /// The pitch the bass plays, in Hz: the song's root in its register.
+    pub root_hz: f64,
+    /// A peak-envelope downsample of the part, for the waveform canvas.
+    pub wave: Vec<f32>,
+    /// The raw mono samples, for Web Audio playback.
+    pub samples: Vec<f32>,
+}
+
+/// The gain each track of a styled result plays at, so the browser hears what
+/// export writes: each track's export level, times one shared scale that is
+/// below 1 only when their sum would pass full scale (R-0033).
+#[derive(Debug, Clone, Copy, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlaybackLevels {
+    /// Gain for the voice.
+    pub voice: f32,
+    /// Gain for the styled drums.
+    pub track: f32,
+    /// Gain for the bass, when there is one.
+    pub bass: f32,
+}
+
 /// A beat prepared for the UI: the lanes, a waveform envelope, and raw samples.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -432,7 +467,9 @@ pub fn build_song(
     busy: u8,
     riff: Option<&RiffView>,
     beat: Option<&BeatView>,
+    bass: Option<&BassView>,
 ) -> Song {
+    let _ = bass;
     // Whatever the riff followed is what the song is in. A session that says
     // 92 BPM for a riff rendered at 126 is a file that lies about itself.
     let settings = Settings {
@@ -520,8 +557,9 @@ pub fn save_session(
     busy: u8,
     riff: Option<&RiffView>,
     beat: Option<&BeatView>,
+    bass: Option<&BassView>,
 ) -> Result<PathBuf, SessionError> {
-    let song = build_song(name, tense, busy, riff, beat);
+    let song = build_song(name, tense, busy, riff, beat, bass);
     let path = session_path(dir, name, "json")?;
     song.save(&path)?;
     Ok(path)
@@ -536,8 +574,9 @@ pub fn export_master(
     busy: u8,
     riff: Option<&RiffView>,
     beat: Option<&BeatView>,
+    bass: Option<&BassView>,
 ) -> Result<PathBuf, SessionError> {
-    let song = build_song(name, tense, busy, riff, beat);
+    let song = build_song(name, tense, busy, riff, beat, bass);
     let path = session_path(dir, name, "wav")?;
     song.export_master(&path)?;
     Ok(path)
@@ -670,7 +709,7 @@ mod tests {
     fn build_song_captures_riff_and_beat_as_stems() {
         let riff = demo_riff();
         let beat = demo_beat();
-        let song = build_song("my song", 30, 55, Some(&riff), Some(&beat));
+        let song = build_song("my song", 30, 55, Some(&riff), Some(&beat), None);
         assert_eq!(song.stems.len(), 2);
         assert_eq!(song.stems[0].kind, gooz_session::StemKind::Riff);
         assert_eq!(song.stems[1].kind, gooz_session::StemKind::Beat);
@@ -683,7 +722,7 @@ mod tests {
     #[test]
     fn build_song_skips_empty_parts() {
         let beat = demo_beat();
-        let song = build_song("beat only", 0, 55, None, Some(&beat));
+        let song = build_song("beat only", 0, 55, None, Some(&beat), None);
         assert_eq!(song.stems.len(), 1);
         assert_eq!(song.stems[0].kind, gooz_session::StemKind::Beat);
     }
@@ -695,12 +734,12 @@ mod tests {
         let mut dir = std::env::temp_dir();
         dir.push(format!("gooz_studio_io_{}", std::process::id()));
 
-        let json = save_session(&dir, "take 1", 30, 55, Some(&riff), Some(&beat)).unwrap();
+        let json = save_session(&dir, "take 1", 30, 55, Some(&riff), Some(&beat), None).unwrap();
         assert!(json.exists() && json.extension().unwrap() == "json");
         let loaded = gooz_session::Song::load(&json).unwrap();
         assert_eq!(loaded.stems.len(), 2);
 
-        let wav = export_master(&dir, "take 1", 30, 55, Some(&riff), Some(&beat)).unwrap();
+        let wav = export_master(&dir, "take 1", 30, 55, Some(&riff), Some(&beat), None).unwrap();
         assert!(wav.exists() && wav.extension().unwrap() == "wav");
         let bytes = std::fs::metadata(&wav).unwrap().len();
         assert!(bytes > 44, "a real WAV is larger than its 44-byte header");

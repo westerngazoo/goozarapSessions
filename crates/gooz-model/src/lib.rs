@@ -43,6 +43,8 @@ pub use intent::{
 #[cfg(feature = "llm")]
 pub use llm::LmParser;
 pub use parse::{DefaultParser, Parser, parse_intent};
-pub use preset::{SoundPlan, VoicePlan, VoiceRole, odd_limit_for, plan_sound, style_names};
+pub use preset::{
+    BassVoice, SoundPlan, VoicePlan, VoiceRole, odd_limit_for, plan_sound, style_names,
+};
 pub use registry::{MODEL_FORMAT_VERSION, ModelHandle, ModelKind, ModelManifest, ModelRegistry};
 pub use timbre::{TimbreDecoder, TrainConfig, TrainProgress, extract_timbre_target, train_timbre};

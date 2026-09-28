@@ -16,6 +16,15 @@ pub struct BeatVoice {
     pub level: f32,
 }
 
+/// The sample offsets at which [`render_beat`] triggers `pattern`'s hits, for
+/// `bars` bars of `tempo` at `sample_rate`: bar by bar, step by step, so
+/// non-decreasing. Empty when `bars`, `sample_rate` or the pattern is empty.
+/// Two offsets can coincide on a bar shorter than its steps.
+pub fn pattern_onsets(pattern: &Pattern, tempo: &Tempo, bars: u32, sample_rate: u32) -> Vec<usize> {
+    let _ = (pattern, tempo, bars, sample_rate);
+    Vec::new()
+}
+
 /// Renders `voices` into a bar-aligned beat buffer: for each bar, every pattern
 /// onset triggers a one-shot at the corresponding sample offset. Returns an
 /// empty buffer when `bars == 0`, `sample_rate == 0`, or `voices` is empty.

@@ -29,6 +29,7 @@
 //! assert!(audio.iter().all(|s| s.is_finite() && s.abs() <= 1.0 + 1e-6));
 //! ```
 
+mod bass;
 mod beat;
 mod distortion;
 mod drums;
@@ -37,7 +38,8 @@ mod render;
 mod sampler;
 mod string;
 
-pub use beat::{BeatVoice, render_beat};
+pub use bass::{Bass808, BassNote, render_808};
+pub use beat::{BeatVoice, pattern_onsets, render_beat};
 pub use distortion::Distortion;
 pub use drums::DrumKind;
 pub use gooz_ratio::Pattern;

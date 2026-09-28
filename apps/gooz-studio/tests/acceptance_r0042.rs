@@ -221,7 +221,7 @@ fn ac5_the_key_is_carried_and_saved() {
         "root {root:.1}"
     );
 
-    let session = build_song("s", TENSE, 55, Some(&song.voice), Some(&song.track));
+    let session = build_song("s", TENSE, 55, Some(&song.voice), Some(&song.track), None);
     assert_eq!(
         session.settings.root_hz, root,
         "the saved key is not the take's"
@@ -274,7 +274,7 @@ fn ac6_voice_and_track_are_one_mix_at_any_rate() {
         assert_eq!(song.voice.samples.len() % song.voice.bars as usize, 0);
         assert_eq!(song.voice.bars, song.track.bars);
 
-        let session = build_song("s", TENSE, 55, Some(&song.voice), Some(&song.track));
+        let session = build_song("s", TENSE, 55, Some(&song.voice), Some(&song.track), None);
         let mix = session.mixdown().expect("one rate, one length: it mixes");
         assert!(!mix.samples.is_empty());
         assert!(
@@ -863,7 +863,7 @@ mod qa_signoff {
 
     /// Saves and mixes through the session path the shell uses (AC6).
     fn assert_it_mixes(song: &Accompaniment, what: &str) {
-        let session = build_song("qa", TENSE, 55, Some(&song.voice), Some(&song.track));
+        let session = build_song("qa", TENSE, 55, Some(&song.voice), Some(&song.track), None);
         let rate = song.voice.sample_rate;
         let stems: Vec<(&str, StemKind, u32)> = session
             .stems
@@ -1262,8 +1262,16 @@ mod qa_signoff {
         assert!(card.cents.expect("a sung note").abs() < 10.0, "{card:?}");
 
         let dir = std::env::temp_dir().join(format!("gooz_qa_r0042_key_{}", std::process::id()));
-        let path = save_session(&dir, "key", TENSE, 55, Some(&song.voice), Some(&song.track))
-            .expect("saves");
+        let path = save_session(
+            &dir,
+            "key",
+            TENSE,
+            55,
+            Some(&song.voice),
+            Some(&song.track),
+            None,
+        )
+        .expect("saves");
         let loaded = gooz_session::Song::load(&path).expect("loads");
         std::fs::remove_dir_all(&dir).ok();
         // serde_json (without `float_roundtrip`) may read a float back one ulp
@@ -1359,7 +1367,7 @@ mod qa_signoff {
         let rate = 16_000;
         let take = in_room(sing(rate, 118.0, 6, 0.7, 0.01), -55.0, 36);
         let song = accompany_take(&take, rate, "trap", TENSE).expect("a sung take");
-        let session = build_song("qa", TENSE, 55, Some(&song.voice), Some(&song.track));
+        let session = build_song("qa", TENSE, 55, Some(&song.voice), Some(&song.track), None);
         let with_muted = |stem: usize| {
             let mut muted = session.clone();
             muted.arrangement.placements[stem].muted = true;
@@ -1386,8 +1394,16 @@ mod qa_signoff {
             .filter_map(|p| p.file_name())
             .map(|n| n.to_string_lossy().into_owned())
             .collect();
-        let master = export_master(&dir, "qa", TENSE, 55, Some(&song.voice), Some(&song.track))
-            .expect("the master exports");
+        let master = export_master(
+            &dir,
+            "qa",
+            TENSE,
+            55,
+            Some(&song.voice),
+            Some(&song.track),
+            None,
+        )
+        .expect("the master exports");
         let bytes = std::fs::metadata(&master).map(|m| m.len());
         std::fs::remove_dir_all(&dir).ok();
         assert_eq!(names, ["00-voice.wav", "01-drums.wav"]);
@@ -1419,7 +1435,7 @@ mod qa_signoff {
             track, song.track,
             "the track did not survive the round trip"
         );
-        let session = build_song("qa", TENSE, 55, Some(&voice), Some(&track));
+        let session = build_song("qa", TENSE, 55, Some(&voice), Some(&track), None);
         assert_eq!(session.stems[0].name, "voice");
         assert_eq!(session.settings.bpm, song.plan.tempo_bpm);
         session.mixdown().expect("one rate, one length");
@@ -1544,7 +1560,7 @@ mod qa_signoff {
     fn regression_every_path_saves_the_clock_it_was_laid_out_at_under_its_own_name() {
         let rate = 48_000;
         let saved = |riff: &RiffView| {
-            let song = build_song("qa", TENSE, 55, Some(riff), None);
+            let song = build_song("qa", TENSE, 55, Some(riff), None, None);
             let stem = &song.stems[0];
             (song.settings.bpm, stem.name.clone(), stem.kind)
         };
@@ -1591,6 +1607,7 @@ mod qa_signoff {
             55,
             Some(&described.riff),
             Some(&described.beat),
+            None,
         );
         assert_eq!(
             session.mixdown().expect("mixes").samples.len(),
@@ -1618,6 +1635,7 @@ mod qa_signoff {
             55,
             Some(&described.riff),
             Some(&described.beat),
+            None,
         );
         assert_eq!(
             session.mixdown().expect("mixes").samples.len(),

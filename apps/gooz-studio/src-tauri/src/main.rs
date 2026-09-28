@@ -18,7 +18,7 @@ use std::path::PathBuf;
 
 use gooz_audio::{AudioBackend, CpalBackend, Engine};
 use gooz_studio::{
-    Accompaniment, BeatView, RiffView, accompany_take, beat_view as beat_view_impl,
+    Accompaniment, BassView, BeatView, RiffView, accompany_take, beat_view as beat_view_impl,
     demo_riff as demo_riff_view, export_master as export_master_impl, instrument_from_take,
     riff_from_take, save_session as save_session_impl, style_names,
 };
@@ -62,7 +62,7 @@ fn sessions_dir() -> PathBuf {
     base.join("goozarapSessions")
 }
 
-/// Saves the current riff/beat as a `.json` session; returns the written path.
+/// Saves the current riff/beat/bass as a `.json` session; returns the written path.
 #[tauri::command]
 fn save_session(
     name: String,
@@ -70,6 +70,7 @@ fn save_session(
     busy: u8,
     riff: Option<RiffView>,
     beat: Option<BeatView>,
+    bass: Option<BassView>,
 ) -> Result<String, String> {
     save_session_impl(
         &sessions_dir(),
@@ -78,12 +79,13 @@ fn save_session(
         busy,
         riff.as_ref(),
         beat.as_ref(),
+        bass.as_ref(),
     )
     .map(|p| p.display().to_string())
     .map_err(|e| e.to_string())
 }
 
-/// Mixes the current riff/beat and writes a master `.wav`; returns the path.
+/// Mixes the current riff/beat/bass and writes a master `.wav`; returns the path.
 #[tauri::command]
 fn export_master(
     name: String,
@@ -91,6 +93,7 @@ fn export_master(
     busy: u8,
     riff: Option<RiffView>,
     beat: Option<BeatView>,
+    bass: Option<BassView>,
 ) -> Result<String, String> {
     export_master_impl(
         &sessions_dir(),
@@ -99,6 +102,7 @@ fn export_master(
         busy,
         riff.as_ref(),
         beat.as_ref(),
+        bass.as_ref(),
     )
     .map(|p| p.display().to_string())
     .map_err(|e| e.to_string())
