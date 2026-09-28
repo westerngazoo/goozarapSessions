@@ -274,6 +274,13 @@ pub struct VoiceView {
     pub steps: u32,
 }
 
+/// The level a riff or voice stem is placed at in a session.
+pub(crate) const RIFF_LEVEL: f32 = 1.0;
+/// The level a drum stem is placed at in a session.
+pub(crate) const BEAT_LEVEL: f32 = 0.9;
+/// The level a bass stem is placed at in a session (R-0033).
+pub(crate) const BASS_LEVEL: f32 = 1.0;
+
 /// A bass part prepared for the UI, the session and the export (R-0033).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -469,7 +476,6 @@ pub fn build_song(
     beat: Option<&BeatView>,
     bass: Option<&BassView>,
 ) -> Song {
-    let _ = bass;
     // Whatever the riff followed is what the song is in. A session that says
     // 92 BPM for a riff rendered at 126 is a file that lies about itself.
     let settings = Settings {
@@ -499,7 +505,7 @@ pub fn build_song(
                 stem: idx,
                 start_bar: 0,
                 muted: false,
-                level: 1.0,
+                level: RIFF_LEVEL,
             });
         span_bars = span_bars.max(r.bars);
     }
@@ -518,7 +524,26 @@ pub fn build_song(
                 stem: idx,
                 start_bar: 0,
                 muted: false,
-                level: 0.9,
+                level: BEAT_LEVEL,
+            });
+        span_bars = span_bars.max(b.bars);
+    }
+
+    if let Some(b) = bass.filter(|b| !b.samples.is_empty()) {
+        let idx = song.stems.len();
+        song = song
+            .with_stem(Stem {
+                name: bass_stem_name(b.voice).into(),
+                kind: StemKind::Other,
+                sample_rate: b.sample_rate,
+                bars: b.bars,
+                samples: b.samples.clone(),
+            })
+            .with_placement(StemPlacement {
+                stem: idx,
+                start_bar: 0,
+                muted: false,
+                level: BASS_LEVEL,
             });
         span_bars = span_bars.max(b.bars);
     }
@@ -531,6 +556,13 @@ pub fn build_song(
         });
     }
     song
+}
+
+/// The stem a bass is saved as, by which bass it is.
+fn bass_stem_name(voice: BassVoice) -> &'static str {
+    match voice {
+        BassVoice::Sub808 => "808",
+    }
 }
 
 /// Ensures `dir` exists and returns `dir/<sanitized name>.<ext>`.

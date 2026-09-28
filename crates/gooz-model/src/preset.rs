@@ -114,6 +114,8 @@ struct Preset {
     kick: Lane,
     snare: Lane,
     hat: Lane,
+    /// The bass the style brings, if any (R-0033).
+    bass: Option<BassVoice>,
 }
 
 /// The preset library. Order is priority: the first entry whose tags the intent
@@ -143,6 +145,7 @@ const PRESETS: &[Preset] = &[
             rotate_beats: 0.0,
             level: 0.6,
         },
+        bass: None,
     },
     Preset {
         name: "trap",
@@ -168,6 +171,7 @@ const PRESETS: &[Preset] = &[
             rotate_beats: 0.0,
             level: 0.6,
         },
+        bass: Some(BassVoice::Sub808),
     },
     Preset {
         name: "metal",
@@ -192,6 +196,7 @@ const PRESETS: &[Preset] = &[
             rotate_beats: 0.0,
             level: 0.6,
         },
+        bass: None,
     },
     Preset {
         name: "free",
@@ -216,6 +221,7 @@ const PRESETS: &[Preset] = &[
             rotate_beats: 0.0,
             level: 0.6,
         },
+        bass: None,
     },
 ];
 
@@ -289,7 +295,7 @@ pub fn plan_sound(intent: &MusicalIntent) -> SoundPlan {
             plan_lane(&preset.hat, VoiceRole::Hat),
         ],
         preset: preset.name.to_string(),
-        bass: None,
+        bass: preset.bass,
     }
 }
 

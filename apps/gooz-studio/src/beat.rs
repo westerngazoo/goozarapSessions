@@ -31,6 +31,19 @@ pub struct BeatVoiceSpec {
     pub level: f32,
 }
 
+impl BeatVoiceSpec {
+    /// The lane's step pattern: `E(onsets, steps)` rotated by `rotate`. The one
+    /// definition of where this lane hits, shared by the drums and by the 808
+    /// that follows the kick (R-0033).
+    ///
+    /// # Errors
+    ///
+    /// Propagates [`BeatError`] from an invalid `E(k, n)`.
+    pub fn pattern(&self) -> Result<Pattern, BeatError> {
+        Ok(Pattern::euclidean(self.onsets, self.steps)?.rotate(self.rotate))
+    }
+}
+
 /// Parameters for [`build_beat`].
 #[derive(Debug, Clone, PartialEq)]
 pub struct BeatConfig {
@@ -101,7 +114,7 @@ pub fn build_beat(
         .voices
         .iter()
         .map(|spec| {
-            let pattern = Pattern::euclidean(spec.onsets, spec.steps)?.rotate(spec.rotate);
+            let pattern = spec.pattern()?;
             Ok(BeatVoice {
                 kind: spec.kind,
                 pattern,

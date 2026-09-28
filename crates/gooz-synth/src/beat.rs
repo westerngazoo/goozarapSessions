@@ -21,8 +21,30 @@ pub struct BeatVoice {
 /// non-decreasing. Empty when `bars`, `sample_rate` or the pattern is empty.
 /// Two offsets can coincide on a bar shorter than its steps.
 pub fn pattern_onsets(pattern: &Pattern, tempo: &Tempo, bars: u32, sample_rate: u32) -> Vec<usize> {
-    let _ = (pattern, tempo, bars, sample_rate);
-    Vec::new()
+    let steps = pattern.len();
+    if bars == 0 || sample_rate == 0 || steps == 0 {
+        return Vec::new();
+    }
+    let bar = bar_len(tempo, sample_rate);
+    (0..bars as usize)
+        .flat_map(|b| {
+            (0..steps)
+                .filter(|&step| pattern.is_onset(step))
+                .map(move |step| b * bar + step_offset(step, steps, bar))
+        })
+        .collect()
+}
+
+/// A bar's length in samples, never zero.
+fn bar_len(tempo: &Tempo, sample_rate: u32) -> usize {
+    ((tempo.bar_seconds() * f64::from(sample_rate)).round() as usize).max(1)
+}
+
+/// Where step `step` of `steps` lands inside a bar of `bar_len` samples:
+/// rounded, and kept inside the bar.
+fn step_offset(step: usize, steps: usize, bar_len: usize) -> usize {
+    let offset = ((step as f64 / steps as f64) * bar_len as f64).round() as usize;
+    offset.min(bar_len.saturating_sub(1))
 }
 
 /// Renders `voices` into a bar-aligned beat buffer: for each bar, every pattern
@@ -60,7 +82,7 @@ pub fn render_beat(voices: &[BeatVoice], tempo: &Tempo, bars: u32, sample_rate: 
     if bars == 0 || sample_rate == 0 || voices.is_empty() {
         return Vec::new();
     }
-    let bar_samples = ((tempo.bar_seconds() * f64::from(sample_rate)).round() as usize).max(1);
+    let bar_samples = bar_len(tempo, sample_rate);
     let total = bar_samples * bars as usize;
     let mut out = vec![0.0f32; total];
 
@@ -75,9 +97,7 @@ pub fn render_beat(voices: &[BeatVoice], tempo: &Tempo, bars: u32, sample_rate: 
                 if !voice.pattern.is_onset(step) {
                     continue;
                 }
-                let offset_in_bar =
-                    ((step as f64 / len as f64) * bar_samples as f64).round() as usize;
-                let offset = bar_start + offset_in_bar.min(bar_samples.saturating_sub(1));
+                let offset = bar_start + step_offset(step, len, bar_samples);
                 mix_hit(voice.kind, sample_rate, voice.level, &mut out, offset);
             }
         }
