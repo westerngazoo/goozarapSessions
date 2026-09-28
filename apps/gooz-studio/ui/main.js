@@ -362,6 +362,8 @@ function reset() {
     bass = null;
     levels = null;
     setBeatControlsEnabled(true);
+    // The lanes line named the styled drums and their bass; neither plays now.
+    showLanes([]);
   }
   document.getElementById("result").classList.add("hidden");
   document.getElementById("intro").classList.remove("hidden");

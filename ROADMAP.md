@@ -105,6 +105,7 @@ M4); it never generates raw audio and never leaves the device. Design in
 | R-0027 | Description-conditioned generation: melody + beat from the intent via the engine (R-0001/2/7/9), biased by the influence model | SPEC-0027 | Done |
 | R-0028 | Voice transformation ("voz distortion"): recorded voice → character/timbre via DSP (formant/pitch, waveshaping) + DDSP timbre transfer (R-0017) | SPEC-0028 | Backlog |
 | R-0029 | "Describe" prompt UI in the studio shell: text/voice prompt → generated stems on the timeline | SPEC-0029 | Backlog |
+| R-0033 | 808 bass: a sine sub that glides and cracks, on every trap kick, at the sung root; played at export's levels | SPEC-0033 | In review |
 
 **Depends on:** M4 (influence models / `gooz-model`), R-0009 (beat builder, for
 genre grooves), R-0017 (timbre transfer, for voice), R-0013 (shell, for the UI).
@@ -125,7 +126,7 @@ genre grooves), R-0017 (timbre transfer, for voice), R-0013 (shell, for the UI).
 | R-0039 | Sampler: any recorded sound becomes an instrument across the grid | SPEC-0039 | Done |
 | R-0040 | Play my sound: record a take, hear it across the grid, in the app | SPEC-0040 | Done |
 | R-0041 | Follow me: a take sets the tempo and the key for everything around it | SPEC-0041 | Done |
-| R-0042 | Sing over a style: your take over a styled track, at your tempo, entering on a downbeat | SPEC-0042 | In review |
+| R-0042 | Sing over a style: your take over a styled track, at your tempo, entering on a downbeat | SPEC-0042 | Done |
 
 **Depends on:** R-0001 (`Ratio`, `PitchGrid::from_ratios`), R-0003 (capture),
 R-0005/R-0006 (track + quantize). R-0039 depends on R-0038.
@@ -160,9 +161,12 @@ complexity — into a playable, exportable WAV. The owner's reference prompt pla
 135 BPM, 6/8, snare on beat 3, saturated hats, using 7:4 and 13:8 for tension.
 
 Next in M7: the engine capabilities the prompts already ask for but the engine
-cannot yet honour — an 808 bass (R-0033), a reverb/EQ chain (R-0034), and a true
-non-4/4 beat clock (R-0035) — then the describe-prompt UI (R-0029) and
-per-instrument prompts (R-0032).
+cannot yet honour — an 808 bass (R-0033, in review: architect-approved, QA PASS),
+a reverb/EQ chain (R-0034), and a true non-4/4 beat clock (R-0035) — then the
+describe-prompt UI (R-0029) and per-instrument prompts (R-0032). After R-0033 the
+owner asked for a studio view (tracks you can drag, the mic at the centre, a
+genre picker) and genre cards for tumbado, sierreño, norteño, tríos and blues
+(research in [`docs/genres.md`](docs/genres.md), #78).
 
 **M8 (the instrument) is the owner's current priority**, in the order they chose
 ("cadena del instrumento"): pitch shift (R-0038) is merged — architect-reviewed
