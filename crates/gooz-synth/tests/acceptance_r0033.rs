@@ -1338,3 +1338,250 @@ fn pattern_onsets_are_empty_for_zero_bars_zero_rate_or_no_hits() {
         "a pattern with no hits"
     );
 }
+
+// ---------------------------------------------------------------------------
+// QA sign-off (loop step 7): what verifying the implementation found untested —
+// legato rolls shorter than the glide, the driven 808 trap actually plays, and
+// the formulas on parts nobody wrote by hand.
+// ---------------------------------------------------------------------------
+
+mod qa_signoff {
+    use super::*;
+    use gooz_synth::Distortion;
+
+    /// A note every 7 ms, each lasting 20 ms, across 30–80 Hz: every note is
+    /// legato, and every 80 ms glide is cut long before it arrives, so every
+    /// join starts from a pitch between two notes.
+    fn dense_roll() -> (Vec<BassNote>, f64, f64) {
+        let pitches = [30.0, 79.9, 45.0, 60.0, 35.0, 75.0, 50.0];
+        let notes: Vec<BassNote> = (0..60)
+            .map(|k| note(pitches[k % pitches.len()], 0.01 + 0.007 * k as f64, 0.02))
+            .collect();
+        (notes, 0.01, 0.01 + 0.007 * 59.0 + 0.02)
+    }
+
+    /// The steepest step of the voice's own held note at `hz` and `drive`, over
+    /// its steady span: what a part at that drive is held to.
+    fn sustained_step(hz: f64, rate: u32, drive: f32) -> f64 {
+        let cfg = Bass808 {
+            drive,
+            ..held(0.08)
+        };
+        let part = render_808(&[note(hz, 0.0, 1.0)], rate, at(rate, 1.0), &cfg);
+        steepest_step(&part[steady(rate, 0, at(rate, 1.0))]).0
+    }
+
+    #[test]
+    fn ac2_ac3_a_legato_roll_shorter_than_the_glide_is_one_click_free_phrase() {
+        let (notes, first, last_end) = dense_roll();
+        for rate in RATES {
+            let part = render_808(&notes, rate, at(rate, 0.6), &held(0.08));
+            let (start, end) = (at(rate, first), at(rate, last_end));
+            assert_sounds(&part, "the roll");
+            assert!(
+                is_silent(&part[..=start]) && is_silent(&part[end - 1..]),
+                "{rate} Hz: the roll is not one phrase from silence to silence"
+            );
+            assert!(
+                !part[start + 1..end - 1]
+                    .windows(2)
+                    .any(|w| w[0] == 0.0 && w[1] == 0.0),
+                "{rate} Hz: the roll fell silent inside — a legato note re-attacked"
+            );
+            let (step, i) = steepest_step(&part);
+            let bound = click_bound(79.9, rate);
+            assert!(
+                step <= bound,
+                "{rate} Hz: a step of {step:.4} at {:.2} ms; the bound is {bound:.4}",
+                i as f64 / f64::from(rate) * 1000.0
+            );
+        }
+    }
+
+    #[test]
+    fn ac3_a_driven_808_steps_no_more_than_its_own_held_note() {
+        // Trap plays the 808 driven (0.40 by default, owner decision). The
+        // drive steepens every zero crossing of a sustained note too, so the
+        // reference is the voice's own held note at the same drive.
+        let (roll, _, _) = dense_roll();
+        for rate in RATES {
+            for drive in [0.4f32, 1.0] {
+                let mut scenes = click_scenes();
+                scenes.push(ClickScene {
+                    what: "the legato roll".into(),
+                    notes: roll.clone(),
+                    cfg: held(0.08),
+                    secs: 0.6,
+                    f_max: 79.9,
+                });
+                for scene in scenes {
+                    let bound = 3.0 * sustained_step(scene.f_max, rate, drive);
+                    assert!(
+                        bound < 0.9,
+                        "harness: a hard cut at a driven peak (a step near 1) must fail"
+                    );
+                    let cfg = Bass808 { drive, ..scene.cfg };
+                    let part = render_808(&scene.notes, rate, at(rate, scene.secs), &cfg);
+                    assert_sounds(&part, &scene.what);
+                    let (step, i) = steepest_step(&part);
+                    assert!(
+                        step <= bound,
+                        "{} at {rate} Hz, drive {drive}: a step of {step:.4} at {:.2} ms; 3× \
+                         the held note's is {bound:.4}",
+                        scene.what,
+                        i as f64 / f64::from(rate) * 1000.0
+                    );
+                }
+            }
+        }
+    }
+
+    /// SPEC-0033 §2.1 restated from its text: sanitized settings; spans in
+    /// `(start, hz, end)` order, one per start sample; phrases of legato
+    /// chains; the phrase envelope; a glide from the current pitch; one phase,
+    /// used before it advances; then `SoftClip` at `8 · drive`.
+    fn spec_render(notes: &[BassNote], rate: u32, len: usize, cfg: &Bass808) -> Vec<f32> {
+        let r = f64::from(rate);
+        let glide = if cfg.glide_secs.is_finite() && cfg.glide_secs > 0.0 {
+            cfg.glide_secs
+        } else {
+            0.0
+        };
+        let decay = if cfg.decay_secs.is_nan() || cfg.decay_secs <= 0.0 {
+            1.2
+        } else {
+            cfg.decay_secs
+        };
+        let drive = if cfg.drive.is_finite() {
+            cfg.drive.clamp(0.0, 1.0)
+        } else {
+            0.0
+        };
+        let mut spans: Vec<(usize, usize, f64)> = notes
+            .iter()
+            .filter(|n| n.hz.is_finite() && n.onset_secs.is_finite() && n.duration_secs.is_finite())
+            .filter(|n| {
+                n.hz > 0.0 && n.hz < r / 2.0 && n.duration_secs > 0.0 && n.onset_secs >= 0.0
+            })
+            .map(|n| {
+                let start = (n.onset_secs * r).round();
+                let end = ((n.onset_secs + n.duration_secs) * r)
+                    .round()
+                    .min(len as f64);
+                (start, end, n.hz)
+            })
+            .filter(|&(start, end, _)| start < len as f64 && end > start)
+            .map(|(start, end, hz)| (start as usize, end as usize, hz))
+            .collect();
+        spans.sort_by(|a, b| a.0.cmp(&b.0).then(a.2.total_cmp(&b.2)).then(a.1.cmp(&b.1)));
+        let mut phrases: Vec<Vec<(usize, usize, f64)>> = Vec::new();
+        for span in spans {
+            match phrases.last_mut() {
+                Some(phrase) if phrase.last().is_some_and(|p| p.0 == span.0) => {
+                    phrase.pop();
+                    phrase.push(span);
+                }
+                Some(phrase) if phrase.last().is_some_and(|p| span.0 < p.1) => phrase.push(span),
+                _ => phrases.push(vec![span]),
+            }
+        }
+        let mut out = vec![0.0f32; len];
+        let (mut phase, mut current) = (0.0f64, 0.0f64);
+        for phrase in &phrases {
+            let (p_start, p_end) = (phrase[0].0, phrase[phrase.len() - 1].1);
+            for (k, &(start, end, to)) in phrase.iter().enumerate() {
+                let stop = phrase.get(k + 1).map_or(end, |next| next.0);
+                let from = if k == 0 { to } else { current };
+                for (i, slot) in out.iter_mut().enumerate().take(stop).skip(start) {
+                    let hz = if glide > 0.0 {
+                        let k = ((i - start) as f64 / r / glide).min(1.0);
+                        from.powf(1.0 - k) * to.powf(k)
+                    } else {
+                        to
+                    };
+                    let tau = (i - p_start) as f64 / r;
+                    let left = (p_end - 1 - i) as f64;
+                    let env = (tau / 0.002).min(1.0)
+                        * (-tau / decay).exp()
+                        * (left / (0.005 * r)).min(1.0);
+                    *slot = (phase.sin() * env) as f32;
+                    phase += TAU * hz / r;
+                    current = hz;
+                }
+            }
+        }
+        out.iter()
+            .map(|x| Distortion::SoftClip.apply(*x, 8.0 * drive))
+            .collect()
+    }
+
+    /// Notes nobody would write by hand: ties on a grid, NaN and Nyquist
+    /// pitches, notes shorter than the release or the glide, and notes that run
+    /// past the end.
+    fn random_part(rng: &mut u64, secs: f64, rate: u32) -> Vec<BassNote> {
+        let mut uniform = || {
+            *rng = rng
+                .wrapping_mul(6_364_136_223_846_793_005)
+                .wrapping_add(1_442_695_040_888_963_407);
+            (*rng >> 11) as f64 / (1u64 << 53) as f64
+        };
+        let count = 1 + (uniform() * 40.0) as usize;
+        (0..count)
+            .map(|_| {
+                let pick = uniform();
+                let hz = if pick < 0.05 {
+                    f64::NAN
+                } else if pick < 0.08 {
+                    f64::from(rate) / 2.0
+                } else {
+                    30.0 + 50.0 * uniform()
+                };
+                let onset = if uniform() < 0.15 {
+                    (uniform() * 8.0).floor() * secs / 8.0
+                } else {
+                    uniform() * secs
+                };
+                let duration = match (uniform() * 4.0) as u32 {
+                    0 => uniform() * 0.004,
+                    1 => uniform() * 0.05,
+                    2 => uniform() * 0.4,
+                    _ => uniform() * 2.0 * secs,
+                };
+                note(hz, onset, duration)
+            })
+            .collect()
+    }
+
+    #[test]
+    fn ac2_ac3_ac5_random_parts_render_as_spec_0033_says_in_any_order() {
+        let mut rng = 0x0033_u64;
+        for trial in 0..240 {
+            let rate = [8_000, 16_000, 44_100, 48_000][trial % 4];
+            let cfg = Bass808 {
+                glide_secs: [0.0, 0.02, 0.08, 0.5][(trial / 4) % 4],
+                decay_secs: [0.3, 1.2, f64::INFINITY][trial % 3],
+                drive: [0.0, 0.4, 1.0][(trial / 3) % 3],
+            };
+            let secs = 0.4 + (trial % 7) as f64 * 0.1;
+            let len = at(rate, secs);
+            let notes = random_part(&mut rng, secs, rate);
+            let part = render_808(&notes, rate, len, &cfg);
+            let spec = spec_render(&notes, rate, len, &cfg);
+            assert_eq!(part.len(), len, "trial {trial}: length");
+            for (i, (got, want)) in part.iter().zip(&spec).enumerate() {
+                assert!(
+                    got.is_finite() && got.abs() <= 1.0 && (got - want).abs() <= 1e-4,
+                    "trial {trial}, sample {i}: {got} where SPEC-0033 gives {want} ({cfg:?}, \
+                     {notes:?})"
+                );
+            }
+            let mut reversed = notes.clone();
+            reversed.reverse();
+            reversed.rotate_left(trial % notes.len());
+            assert!(
+                render_808(&reversed, rate, len, &cfg) == part,
+                "trial {trial}: the same notes in another order render differently"
+            );
+        }
+    }
+}

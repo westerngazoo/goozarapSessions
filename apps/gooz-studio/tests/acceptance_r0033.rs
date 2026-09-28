@@ -762,3 +762,176 @@ fn ac8_the_shell_receives_the_bass_and_levels_and_hands_the_bass_back() {
         corrido["bass"]
     );
 }
+
+// ---------------------------------------------------------------------------
+// QA sign-off (loop step 7): what verifying the implementation found untested —
+// the other clocks a trap take can land on, a session read back from disk, and
+// the lane pattern the drums and the 808 now share.
+// ---------------------------------------------------------------------------
+
+mod qa_signoff {
+    use super::*;
+    use gooz_ratio::BeatError;
+    use gooz_studio::BeatVoiceSpec;
+
+    /// One held vowel: nothing to follow a tempo from, so the style's own clock
+    /// plays.
+    fn held_note() -> Vec<f32> {
+        let mut take = vec![0.0f32; at(RATE, 0.3)];
+        take.extend(vowel(RATE, 200.0, 2.5));
+        take.extend(vec![0.0f32; at(RATE, 0.3)]);
+        take
+    }
+
+    #[test]
+    fn ac7_ac8_the_808_follows_the_kick_on_a_slow_take_and_on_the_styles_own_clock() {
+        for (what, take, followed) in [
+            ("a take at 62 BPM", sing(260.0, 62.0, 5), true),
+            ("a held note with no pulse", held_note(), false),
+        ] {
+            let song = accompany(&take, "trap");
+            assert_eq!(
+                song.voice.followed_bpm.is_some(),
+                followed,
+                "harness: {what} followed {:?}",
+                song.voice.followed_bpm
+            );
+            if !followed {
+                assert_eq!(
+                    song.plan.tempo_bpm, song.plan.style_bpm,
+                    "{what}: not on the style's clock"
+                );
+            }
+            let bass = bass_of(&song, what);
+            let len = song.voice.samples.len();
+            assert_eq!(
+                (bass.samples.len(), song.track.samples.len()),
+                (len, len),
+                "{what}: lengths"
+            );
+            assert_eq!(
+                (bass.sample_rate, bass.bars),
+                (song.voice.sample_rate, song.voice.bars),
+                "{what}: rate and bars"
+            );
+            let kicks = kicks_played(&song);
+            assert!(kicks.len() >= 2, "harness: {what} has kicks: {kicks:?}");
+            assert!(
+                bass.samples
+                    == hits_until_next_rendered(&kicks, len, bass.root_hz, RATE, song.plan.drive),
+                "{what}: the 808 is not one note per kick, each lasting until the next"
+            );
+
+            let levels = song.levels;
+            let played: Vec<f32> = (0..len)
+                .map(|i| {
+                    song.voice.samples[i] * levels.voice
+                        + song.track.samples[i] * levels.track
+                        + bass.samples[i] * levels.bass
+                })
+                .collect();
+            let exported = build_song(
+                "qa",
+                TENSE,
+                55,
+                Some(&song.voice),
+                Some(&song.track),
+                Some(bass),
+            )
+            .mixdown()
+            .expect("it mixes");
+            assert_close(
+                &played,
+                &exported.samples,
+                1e-5,
+                &format!("{what}: what the studio plays against what export writes"),
+            );
+        }
+    }
+
+    #[test]
+    fn ac8_a_session_read_back_mixes_as_saved_and_its_808_file_is_the_808() {
+        let song = accompany(&sing(260.0, 126.0, 6), "trap");
+        let bass = bass_of(&song, "trap");
+        let dir = temp_dir("signoff_reload");
+        let json = save_session(
+            &dir,
+            "reload",
+            TENSE,
+            55,
+            Some(&song.voice),
+            Some(&song.track),
+            Some(bass),
+        )
+        .expect("saves");
+        let loaded = Song::load(&json).expect("loads");
+        let stems = loaded
+            .export_stems(dir.join("stems"))
+            .expect("stems export");
+        let file = std::fs::read(&stems[2]).expect("the 808 stem is written");
+        std::fs::remove_dir_all(&dir).ok();
+
+        let saved = build_song(
+            "reload",
+            TENSE,
+            55,
+            Some(&song.voice),
+            Some(&song.track),
+            Some(bass),
+        )
+        .mixdown()
+        .expect("it mixes");
+        let reloaded = loaded.mixdown().expect("the session read back mixes");
+        assert_close(
+            &reloaded.samples,
+            &saved.samples,
+            1e-6,
+            "the session read back against the one saved",
+        );
+
+        assert!(stems[2].ends_with("02-808.wav"), "{:?}", stems[2]);
+        assert_eq!(
+            file.len(),
+            44 + 2 * bass.samples.len(),
+            "a mono 16-bit 808 as long as the 808"
+        );
+        let (pcm, rest) = file[44..].as_chunks::<2>();
+        assert!(rest.is_empty(), "harness: whole 16-bit samples");
+        for (i, pair) in pcm.iter().enumerate() {
+            let written = i16::from_le_bytes(*pair);
+            let want = (bass.samples[i].clamp(-1.0, 1.0) * f32::from(i16::MAX)).round() as i16;
+            assert!(
+                (i32::from(written) - i32::from(want)).abs() <= 1,
+                "02-808.wav sample {i} is {written}; the 808 is {want}"
+            );
+        }
+    }
+
+    #[test]
+    fn ac7_a_lane_hits_where_its_euclidean_rhythm_rotated_says() {
+        // SPEC-0033 §2.4: one definition of where a lane hits, for the drums
+        // and for the 808 on the kick. Trap's kick is unrotated today, so no
+        // take pins the rotation; this does.
+        let lane = |onsets, steps, rotate| BeatVoiceSpec {
+            kind: DrumKind::Kick,
+            onsets,
+            steps,
+            rotate,
+            level: 1.0,
+        };
+        for (k, n, r) in [(3, 8, 1), (4, 16, 0), (5, 16, -3), (2, 16, 8), (7, 12, 13)] {
+            assert_eq!(
+                lane(k, n, r).pattern(),
+                Ok(Pattern::euclidean(k, n).expect("valid").rotate(r)),
+                "E({k}, {n}) rotated by {r}"
+            );
+        }
+        assert_ne!(
+            lane(3, 8, 1).pattern(),
+            Pattern::euclidean(3, 8),
+            "harness: a rotation moves E(3, 8)"
+        );
+        assert_eq!(lane(9, 8, 0).pattern(), Err(BeatError::TooManyOnsets));
+        assert_eq!(lane(0, 0, 0).pattern(), Err(BeatError::EmptyGrid));
+    }
+}
