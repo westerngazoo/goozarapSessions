@@ -9,6 +9,9 @@ let current = null;
 let audioCtx = null;
 let node = null;
 let playing = false;
+// A play tap waiting for the audio context: a second tap must not start a
+// second loop that nothing can stop.
+let starting = false;
 let busy = false;
 
 // What the recording becomes: "hum" runs the hum→riff pipeline (R-0008),
@@ -21,6 +24,12 @@ let mode = "hum";
 // and nothing fetches a generic Easy Mode beat over it.
 let style = null;
 let track = null;
+
+// A styled result's bass (R-0033), when the style has one, and the gains the
+// voice, the drums and the bass play at so playback is what export writes.
+let bass = null;
+let levels = null;
+let bassNode = null;
 
 // A capture in progress: tap to start, tap again to stop (R-0042). The shell
 // caps a take at 30 s; the UI stops itself at the same point.
@@ -137,8 +146,11 @@ function showIntroMessage(text) {
 }
 
 // ---- mode toggle ----
+// The modes stay on screen over a result too, so picking one is also the way
+// back from it: to the mic, in the mode picked.
 function setMode(next) {
   if (busy || !MODES[next]) return;
+  reset();
   mode = next;
   const copy = MODES[mode];
   document.getElementById("prompt").innerHTML =
@@ -228,16 +240,21 @@ async function finishRecording() {
   }
 }
 
-// A result from any mode. An accompaniment is two stems: the voice is shown and
-// played as the riff, and its styled drums become *the* beat.
+// A result from any mode. An accompaniment is two or three stems: the voice is
+// shown and played as the riff, its styled drums become *the* beat, and the
+// style's bass, if it has one, plays under both.
 function present(result, copy) {
   if (copy.chips) {
     stopBeat();
     track = result.track;
+    bass = result.bass ?? null;
+    levels = result.levels;
     lastBeat = track;
     showResult(result.voice, copy.heard);
   } else {
     track = null;
+    bass = null;
+    levels = null;
     showResult(result, copy.heard);
   }
   setBeatControlsEnabled(!track);
@@ -307,6 +324,7 @@ function drawWave(data) {
 }
 function showResult(data, heading) {
   current = data;
+  document.getElementById("toast").classList.add("hidden");
   document.getElementById("heard").textContent = heading;
   const nn = document.getElementById("notes");
   nn.innerHTML = "";
@@ -333,12 +351,19 @@ function showResult(data, heading) {
   document.getElementById("intro").classList.add("hidden");
   document.getElementById("result").classList.remove("hidden");
 }
+// Back to the mic, in the current mode. A save/export message belonged to the
+// result being left, so it goes with it.
 function reset() {
   stopAudio();
+  document.getElementById("toast").classList.add("hidden");
   if (track) {
     stopBeat();
     track = null;
+    bass = null;
+    levels = null;
     setBeatControlsEnabled(true);
+    // The lanes line named the styled drums and their bass; neither plays now.
+    showLanes([]);
   }
   document.getElementById("result").classList.add("hidden");
   document.getElementById("intro").classList.remove("hidden");
@@ -347,6 +372,7 @@ function reset() {
 // ---- playback (Web Audio) ----
 function stopAudio() {
   if (node) { try { node.stop(); } catch (_) {} node = null; }
+  stopBass();
   playing = false;
   const b = document.getElementById("playBtn");
   if (b) b.textContent = "▶ play loop";
@@ -375,8 +401,18 @@ async function togglePlay() {
     if (track) stopBeat();
     return stopAudio();
   }
+  if (starting) return;
+  const wanted = current;
   audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
-  await audioCtx.resume();
+  starting = true;
+  try {
+    await audioCtx.resume();
+  } finally {
+    starting = false;
+  }
+  // The first resume can take a moment; a result left or replaced meanwhile is
+  // not the one the tap asked to play.
+  if (current !== wanted || document.getElementById("result").classList.contains("hidden")) return;
   let buf;
   if (current.samples && current.samples.length) {
     buf = audioCtx.createBuffer(1, current.samples.length, current.sampleRate);
@@ -387,11 +423,12 @@ async function togglePlay() {
   node = audioCtx.createBufferSource();
   node.buffer = buf;
   node.loop = true;
-  node.connect(audioCtx.destination);
-  // With a styled track, both loops start at one scheduled instant. They are
-  // the same length by construction (R-0042), so they stay locked together.
+  node.connect(outlet(levels?.voice));
+  // With a styled track, every loop starts at one scheduled instant. They are
+  // the same length by construction (R-0042, R-0033), so they stay locked.
   const at = audioCtx.currentTime + 0.05;
-  if (track) startBeatNode(track, at);
+  if (track) startBeatNode(track, at, outlet(levels.track));
+  if (bass) startBassNode(bass, at, outlet(levels.bass));
   node.start(at);
   playing = true;
   btn.textContent = "◼ stop";
@@ -482,11 +519,13 @@ function synthBeat(busy) {
 }
 
 function showLanes(voices) {
-  document.getElementById("beatLanes").textContent =
-    (voices || []).map((v) => `${v.name} ${v.onsets}/${v.steps}`).join("  ·  ");
+  const lanes = (voices || []).map((v) => `${v.name} ${v.onsets}/${v.steps}`);
+  if (bass) lanes.push(bass.voice);
+  document.getElementById("beatLanes").textContent = lanes.join("  ·  ");
 }
 function stopBeat() {
   if (beatNode) { try { beatNode.stop(); } catch (_) {} beatNode = null; }
+  stopBass();
   beatPlaying = false;
   document.getElementById("beatBtn").textContent = "▶ beat";
 }
@@ -498,7 +537,17 @@ async function playBeat() {
   startBeatNode(data, audioCtx.currentTime);
 }
 
-function startBeatNode(data, at) {
+// Where a loop plays into: straight to the output, or through a gain set to
+// its level (a styled result's `levels`, which make playback equal export).
+function outlet(level) {
+  if (level == null) return audioCtx.destination;
+  const gain = audioCtx.createGain();
+  gain.gain.value = level;
+  gain.connect(audioCtx.destination);
+  return gain;
+}
+
+function startBeatNode(data, at, to = audioCtx.destination) {
   showLanes(data.voices);
   const buf = audioCtx.createBuffer(1, data.samples.length, data.sampleRate);
   buf.copyToChannel(Float32Array.from(data.samples), 0);
@@ -506,11 +555,26 @@ function startBeatNode(data, at) {
   beatNode = audioCtx.createBufferSource();
   beatNode.buffer = buf;
   beatNode.loop = true;
-  beatNode.connect(audioCtx.destination);
+  beatNode.connect(to);
   beatNode.start(at);
   beatPlaying = true;
   document.getElementById("beatBtn").textContent = "◼ beat";
 }
+// ---- the style's bass (R-0033): plays only with the voice, from play ----
+function startBassNode(data, at, to) {
+  const buf = audioCtx.createBuffer(1, data.samples.length, data.sampleRate);
+  buf.copyToChannel(Float32Array.from(data.samples), 0);
+  stopBass();
+  bassNode = audioCtx.createBufferSource();
+  bassNode.buffer = buf;
+  bassNode.loop = true;
+  bassNode.connect(to);
+  bassNode.start(at);
+}
+function stopBass() {
+  if (bassNode) { try { bassNode.stop(); } catch (_) {} bassNode = null; }
+}
+
 // A new riff can be at a new tempo. A beat fetched for the previous one would
 // play against it — and be what save/export write next to it, under settings
 // that claim the new tempo. So the beat is fetched again for the new riff:
@@ -546,12 +610,16 @@ async function saveOrExport(cmd, label) {
     busy: busyValue(),
     riff: current || null,
     beat: lastBeat || null,
+    bass: bass || null,
   };
+  // A save that finishes after its result was replaced reports under a
+  // result it did not save, so it says nothing.
+  const saving = current;
   try {
     const path = await invoke(cmd, args);
-    toast(label + " → " + path);
+    if (current === saving) toast(label + " → " + path);
   } catch (e) {
-    toast(label + " failed: " + e, false);
+    if (current === saving) toast(label + " failed: " + e, false);
   }
 }
 

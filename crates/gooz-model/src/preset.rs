@@ -14,6 +14,15 @@ use crate::intent::{Meter, MusicalIntent};
 const TENSE_MIN_ODD: u64 = 3;
 const TENSE_MAX_ODD: u64 = 15;
 
+/// A bass a style brings with it (R-0033). A role label, like [`VoiceRole`]:
+/// it names the part, and the engine decides how it sounds.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum BassVoice {
+    /// A sine sub-bass with a long decay, a glide and a drive.
+    #[serde(rename = "808")]
+    Sub808,
+}
+
 /// Which kit role a lane plays. Mirrors the drum kit without importing synth
 /// types (which live in a crate that depends on this one).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -74,6 +83,10 @@ pub struct SoundPlan {
     /// serialized before this field existed still reads.
     #[serde(default = "default_style_bpm")]
     pub style_bpm: f64,
+    /// The style's bass, if it has one (R-0033). A plan saved before this
+    /// field existed reads as `None`.
+    #[serde(default)]
+    pub bass: Option<BassVoice>,
 }
 
 /// A lane's shape within a preset: how sparse/busy it can get, where its accent
@@ -101,6 +114,8 @@ struct Preset {
     kick: Lane,
     snare: Lane,
     hat: Lane,
+    /// The bass the style brings, if any (R-0033).
+    bass: Option<BassVoice>,
 }
 
 /// The preset library. Order is priority: the first entry whose tags the intent
@@ -130,6 +145,7 @@ const PRESETS: &[Preset] = &[
             rotate_beats: 0.0,
             level: 0.6,
         },
+        bass: None,
     },
     Preset {
         name: "trap",
@@ -155,6 +171,7 @@ const PRESETS: &[Preset] = &[
             rotate_beats: 0.0,
             level: 0.6,
         },
+        bass: Some(BassVoice::Sub808),
     },
     Preset {
         name: "metal",
@@ -179,6 +196,7 @@ const PRESETS: &[Preset] = &[
             rotate_beats: 0.0,
             level: 0.6,
         },
+        bass: None,
     },
     Preset {
         name: "free",
@@ -203,6 +221,7 @@ const PRESETS: &[Preset] = &[
             rotate_beats: 0.0,
             level: 0.6,
         },
+        bass: None,
     },
 ];
 
@@ -276,6 +295,7 @@ pub fn plan_sound(intent: &MusicalIntent) -> SoundPlan {
             plan_lane(&preset.hat, VoiceRole::Hat),
         ],
         preset: preset.name.to_string(),
+        bass: preset.bass,
     }
 }
 

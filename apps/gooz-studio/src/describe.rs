@@ -105,7 +105,7 @@ pub(crate) fn beat_from_plan(plan: &SoundPlan, bars: u32, sample_rate: u32) -> B
 }
 
 /// Maps the plan's lanes onto the beat builder's config (AC1).
-fn beat_specs_from(plan: &SoundPlan) -> Vec<BeatVoiceSpec> {
+pub(crate) fn beat_specs_from(plan: &SoundPlan) -> Vec<BeatVoiceSpec> {
     plan.voices
         .iter()
         .map(|voice| BeatVoiceSpec {

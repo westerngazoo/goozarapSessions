@@ -80,7 +80,7 @@ fn ac7_a_saved_session_says_what_the_song_is_actually_in() {
     let bpm = take.followed_bpm.expect("a plucked take has a pulse");
     let root = take.followed_root_hz.expect("and a pitch");
 
-    let song = build_song("session 001", TENSE, 55, Some(&take), None);
+    let song = build_song("session 001", TENSE, 55, Some(&take), None, None);
     assert_eq!(
         song.settings.bpm, bpm,
         "the session's tempo is not the riff's"
@@ -91,7 +91,7 @@ fn ac7_a_saved_session_says_what_the_song_is_actually_in() {
     );
 
     // With nothing followed, Easy Mode's own constants are what gets written.
-    let plain = build_song("session 002", TENSE, 55, None, None);
+    let plain = build_song("session 002", TENSE, 55, None, None, None);
     assert_eq!(plain.settings.bpm, 92.0);
     assert_eq!(plain.settings.root_hz, 220.0);
 }

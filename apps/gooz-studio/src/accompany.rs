@@ -2,18 +2,23 @@
 //! style: at your tempo, entering on a downbeat. Realizes R-0042 / SPEC-0042.
 //!
 //! The voice and the track come back as a [`RiffView`] and a [`BeatView`]
-//! because those are what the studio already plays, saves and exports. That
-//! only works if the two agree on three things, which this module guarantees
-//! and its tests pin: **the same sample rate, the same length, and a whole
-//! number of bars** of 4/4.
+//! because those are what the studio already plays, saves and exports, and a
+//! style that brings a bass adds a [`BassView`] (R-0033). That only works if
+//! they all agree on three things, which this module guarantees and its tests
+//! pin: **the same sample rate, the same length, and a whole number of bars**
+//! of 4/4.
 
 use gooz_dsp::{DspError, analyze, first_sung_note, follow, quantize_notes};
 use gooz_model::{Meter, SoundPlan, parse_intent, plan_sound};
 use serde::Serialize;
 
+use crate::bass::bass_from_plan;
 use crate::describe::{beat_from_plan, plan_tempo};
 use crate::pipeline::{PipelineConfig, bar_samples, pad_to_bars};
-use crate::view::{BeatView, NoteView, Part, RiffView, WAVE_BUCKETS, followed_grid, peak_envelope};
+use crate::view::{
+    BassView, BeatView, NoteView, Part, PlaybackLevels, RiffView, WAVE_BUCKETS, followed_grid,
+    peak_envelope, playback_levels,
+};
 
 /// The level the voice is brought to: −1 dBFS at its peak.
 ///
@@ -37,6 +42,10 @@ pub struct Accompaniment {
     pub voice: RiffView,
     /// The styled drums: same rate, same length.
     pub track: BeatView,
+    /// The style's bass, when it has one (R-0033): same rate, same length.
+    pub bass: Option<BassView>,
+    /// The gains the three tracks play at, so playback is what export writes.
+    pub levels: PlaybackLevels,
 }
 
 /// Puts a sung take over a drum track in `style`.
@@ -98,8 +107,18 @@ pub fn accompany_take(
     let grid = followed_grid(tense, &heard);
     let notes = quantize_notes(&transcription.notes, &grid, &tempo, cfg.subdivision);
 
+    let track = beat_from_plan(&plan, bars, sample_rate);
+    let bass = bass_from_plan(&plan, grid.root_hz(), bars, sample_rate);
+    let levels = playback_levels(
+        &voice,
+        &track.samples,
+        bass.as_ref().map(|b| b.samples.as_slice()),
+    );
+
     Ok(Accompaniment {
-        track: beat_from_plan(&plan, bars, sample_rate),
+        track,
+        bass,
+        levels,
         voice: RiffView {
             sample_rate,
             bars,

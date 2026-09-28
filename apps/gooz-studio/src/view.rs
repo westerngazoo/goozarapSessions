@@ -12,6 +12,7 @@ use serde::{Deserialize, Serialize};
 use gooz_dsp::{
     DspError, Follow, MAX_BPM, MIN_BPM, PitchGrid, QuantizedNote, Tempo, analyze, follow,
 };
+use gooz_model::BassVoice;
 use gooz_session::{Section, SessionError, Settings, Song, Stem, StemKind, StemPlacement};
 
 use crate::{
@@ -273,6 +274,72 @@ pub struct VoiceView {
     pub steps: u32,
 }
 
+/// The level a riff or voice stem is placed at in a session.
+pub(crate) const RIFF_LEVEL: f32 = 1.0;
+/// The level a drum stem is placed at in a session.
+pub(crate) const BEAT_LEVEL: f32 = 0.9;
+/// The level a bass stem is placed at in a session (R-0033).
+pub(crate) const BASS_LEVEL: f32 = 1.0;
+
+/// A bass part prepared for the UI, the session and the export (R-0033).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BassView {
+    /// Which bass this is; its stem name comes from here.
+    pub voice: BassVoice,
+    /// Sample rate of `samples`, in Hz.
+    pub sample_rate: u32,
+    /// Length of the loop in whole bars.
+    pub bars: u32,
+    /// Duration of the loop in seconds.
+    pub seconds: f64,
+    /// The pitch the bass plays, in Hz: the song's root in its register.
+    pub root_hz: f64,
+    /// A peak-envelope downsample of the part, for the waveform canvas.
+    pub wave: Vec<f32>,
+    /// The raw mono samples, for Web Audio playback.
+    pub samples: Vec<f32>,
+}
+
+/// The gain each track of a styled result plays at, so the browser hears what
+/// export writes: each track's export level, times one shared scale that is
+/// below 1 only when their sum would pass full scale (R-0033).
+#[derive(Debug, Clone, Copy, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlaybackLevels {
+    /// Gain for the voice.
+    pub voice: f32,
+    /// Gain for the styled drums.
+    pub track: f32,
+    /// Gain for the bass, when there is one.
+    pub bass: f32,
+}
+
+/// The gains that make playback equal export's mixdown: each track at the level
+/// `build_song` places it at, all scaled by one factor that is below 1 only when
+/// their sum would pass full scale — export's peak limit, computed the same way.
+pub(crate) fn playback_levels(
+    voice: &[f32],
+    track: &[f32],
+    bass: Option<&[f32]>,
+) -> PlaybackLevels {
+    let bass = bass.unwrap_or(&[]);
+    let at = |stem: &[f32], i: usize, level: f32| stem.get(i).map_or(0.0, |x| x * level);
+    let longest = voice.len().max(track.len()).max(bass.len());
+    // Summed in `mixdown`'s order (voice, drums, bass) so the peak is its peak.
+    let peak = (0..longest)
+        .map(|i| {
+            (at(voice, i, RIFF_LEVEL) + at(track, i, BEAT_LEVEL) + at(bass, i, BASS_LEVEL)).abs()
+        })
+        .fold(0.0f32, f32::max);
+    let scale = if peak > 1.0 { 1.0 / peak } else { 1.0 };
+    PlaybackLevels {
+        voice: RIFF_LEVEL * scale,
+        track: BEAT_LEVEL * scale,
+        bass: BASS_LEVEL * scale,
+    }
+}
+
 /// A beat prepared for the UI: the lanes, a waveform envelope, and raw samples.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -424,14 +491,16 @@ pub(crate) fn peak_envelope(samples: &[f32], buckets: usize) -> Vec<f32> {
 }
 
 /// Assembles a saveable [`Song`] from what the shell is holding: the current
-/// slider settings plus an optional riff and/or beat. Each present part becomes
-/// a [`Stem`] placed at bar 0; a single section spans the longer of the two.
+/// slider settings plus an optional riff (or voice), beat and bass. Each present
+/// part becomes a [`Stem`] placed at bar 0, in that order, at [`RIFF_LEVEL`],
+/// [`BEAT_LEVEL`] and [`BASS_LEVEL`]; a single section spans the longest.
 pub fn build_song(
     name: &str,
     tense: u8,
     busy: u8,
     riff: Option<&RiffView>,
     beat: Option<&BeatView>,
+    bass: Option<&BassView>,
 ) -> Song {
     // Whatever the riff followed is what the song is in. A session that says
     // 92 BPM for a riff rendered at 126 is a file that lies about itself.
@@ -462,7 +531,7 @@ pub fn build_song(
                 stem: idx,
                 start_bar: 0,
                 muted: false,
-                level: 1.0,
+                level: RIFF_LEVEL,
             });
         span_bars = span_bars.max(r.bars);
     }
@@ -481,7 +550,26 @@ pub fn build_song(
                 stem: idx,
                 start_bar: 0,
                 muted: false,
-                level: 0.9,
+                level: BEAT_LEVEL,
+            });
+        span_bars = span_bars.max(b.bars);
+    }
+
+    if let Some(b) = bass.filter(|b| !b.samples.is_empty()) {
+        let idx = song.stems.len();
+        song = song
+            .with_stem(Stem {
+                name: bass_stem_name(b.voice).into(),
+                kind: StemKind::Other,
+                sample_rate: b.sample_rate,
+                bars: b.bars,
+                samples: b.samples.clone(),
+            })
+            .with_placement(StemPlacement {
+                stem: idx,
+                start_bar: 0,
+                muted: false,
+                level: BASS_LEVEL,
             });
         span_bars = span_bars.max(b.bars);
     }
@@ -494,6 +582,13 @@ pub fn build_song(
         });
     }
     song
+}
+
+/// The stem a bass is saved as, by which bass it is.
+fn bass_stem_name(voice: BassVoice) -> &'static str {
+    match voice {
+        BassVoice::Sub808 => "808",
+    }
 }
 
 /// Ensures `dir` exists and returns `dir/<sanitized name>.<ext>`.
@@ -511,8 +606,8 @@ fn session_path(dir: &Path, name: &str, ext: &str) -> Result<PathBuf, SessionErr
     Ok(dir.join(format!("{stem}.{ext}")))
 }
 
-/// Saves the current riff/beat as a `.json` session under `dir`, returning the
-/// written path.
+/// Saves the current riff/beat/bass as a `.json` session under `dir`, returning
+/// the written path.
 pub fn save_session(
     dir: &Path,
     name: &str,
@@ -520,15 +615,16 @@ pub fn save_session(
     busy: u8,
     riff: Option<&RiffView>,
     beat: Option<&BeatView>,
+    bass: Option<&BassView>,
 ) -> Result<PathBuf, SessionError> {
-    let song = build_song(name, tense, busy, riff, beat);
+    let song = build_song(name, tense, busy, riff, beat, bass);
     let path = session_path(dir, name, "json")?;
     song.save(&path)?;
     Ok(path)
 }
 
-/// Mixes the current riff/beat and writes a master `.wav` under `dir`, returning
-/// the written path.
+/// Mixes the current riff/beat/bass and writes a master `.wav` under `dir`,
+/// returning the written path.
 pub fn export_master(
     dir: &Path,
     name: &str,
@@ -536,8 +632,9 @@ pub fn export_master(
     busy: u8,
     riff: Option<&RiffView>,
     beat: Option<&BeatView>,
+    bass: Option<&BassView>,
 ) -> Result<PathBuf, SessionError> {
-    let song = build_song(name, tense, busy, riff, beat);
+    let song = build_song(name, tense, busy, riff, beat, bass);
     let path = session_path(dir, name, "wav")?;
     song.export_master(&path)?;
     Ok(path)
@@ -546,6 +643,20 @@ pub fn export_master(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn levels_are_export_levels_until_the_sum_would_clip() {
+        let quiet = playback_levels(&[0.1, -0.1], &[0.2, 0.2], Some(&[0.1, 0.0]));
+        assert_eq!(
+            (quiet.voice, quiet.track, quiet.bass),
+            (RIFF_LEVEL, BEAT_LEVEL, BASS_LEVEL)
+        );
+        let loud = playback_levels(&[0.9, 0.0], &[1.0, 0.0], Some(&[1.0, 0.0]));
+        let peak = 0.9 * RIFF_LEVEL + 1.0 * BEAT_LEVEL + 1.0 * BASS_LEVEL;
+        assert!((loud.voice - RIFF_LEVEL / peak).abs() < 1e-6);
+        assert!((loud.track - BEAT_LEVEL / peak).abs() < 1e-6);
+        assert!((loud.bass - BASS_LEVEL / peak).abs() < 1e-6);
+    }
 
     #[test]
     fn demo_riff_hears_the_four_hummed_tones() {
@@ -670,7 +781,7 @@ mod tests {
     fn build_song_captures_riff_and_beat_as_stems() {
         let riff = demo_riff();
         let beat = demo_beat();
-        let song = build_song("my song", 30, 55, Some(&riff), Some(&beat));
+        let song = build_song("my song", 30, 55, Some(&riff), Some(&beat), None);
         assert_eq!(song.stems.len(), 2);
         assert_eq!(song.stems[0].kind, gooz_session::StemKind::Riff);
         assert_eq!(song.stems[1].kind, gooz_session::StemKind::Beat);
@@ -683,7 +794,7 @@ mod tests {
     #[test]
     fn build_song_skips_empty_parts() {
         let beat = demo_beat();
-        let song = build_song("beat only", 0, 55, None, Some(&beat));
+        let song = build_song("beat only", 0, 55, None, Some(&beat), None);
         assert_eq!(song.stems.len(), 1);
         assert_eq!(song.stems[0].kind, gooz_session::StemKind::Beat);
     }
@@ -695,12 +806,12 @@ mod tests {
         let mut dir = std::env::temp_dir();
         dir.push(format!("gooz_studio_io_{}", std::process::id()));
 
-        let json = save_session(&dir, "take 1", 30, 55, Some(&riff), Some(&beat)).unwrap();
+        let json = save_session(&dir, "take 1", 30, 55, Some(&riff), Some(&beat), None).unwrap();
         assert!(json.exists() && json.extension().unwrap() == "json");
         let loaded = gooz_session::Song::load(&json).unwrap();
         assert_eq!(loaded.stems.len(), 2);
 
-        let wav = export_master(&dir, "take 1", 30, 55, Some(&riff), Some(&beat)).unwrap();
+        let wav = export_master(&dir, "take 1", 30, 55, Some(&riff), Some(&beat), None).unwrap();
         assert!(wav.exists() && wav.extension().unwrap() == "wav");
         let bytes = std::fs::metadata(&wav).unwrap().len();
         assert!(bytes > 44, "a real WAV is larger than its 44-byte header");
